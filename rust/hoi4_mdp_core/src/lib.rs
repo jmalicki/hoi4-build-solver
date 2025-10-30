@@ -100,11 +100,23 @@ fn infra_mult(infra: u8) -> f64 {
 
 fn fmt_count(n: usize) -> String {
     if n >= 1_000_000_000 {
-        format!("{:.1}B", (n as f64) / 1_000_000_000.0)
+        format!("{:.2}B", (n as f64) / 1_000_000_000.0)
     } else if n >= 1_000_000 {
-        format!("{:.1}M", (n as f64) / 1_000_000.0)
+        format!("{:.2}M", (n as f64) / 1_000_000.0)
     } else if n >= 1_000 {
-        format!("{:.1}K", (n as f64) / 1_000.0)
+        format!("{:.2}K", (n as f64) / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
+fn fmt_step(n: usize) -> String {
+    if n % 1_000_000_000 == 0 && n >= 1_000_000_000 {
+        format!("{}B", n / 1_000_000_000)
+    } else if n % 1_000_000 == 0 && n >= 1_000_000 {
+        format!("{}M", n / 1_000_000)
+    } else if n % 1_000 == 0 && n >= 1_000 {
+        format!("{}K", n / 1_000)
     } else {
         n.to_string()
     }
@@ -324,11 +336,12 @@ fn solve_and_reconstruct(
     let mut pruned_before_insert: usize = 0;
     let mut pruned_in_rebuild: usize = 0;
     if verbose {
+        let pe = fmt_step(print_every);
         println!(
             "[A*] start: heap={} target={} print_every={}",
             open.len(),
             target_military,
-            print_every
+            pe
         );
         let _ = io::stdout().flush();
     }
