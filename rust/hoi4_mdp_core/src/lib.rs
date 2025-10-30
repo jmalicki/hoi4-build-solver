@@ -98,6 +98,41 @@ fn infra_mult(infra: u8) -> f64 {
     1.0 + (2.0 * (infra as f64)) / 10.0
 }
 
+/// Upper bound: finish by building only military using current infra and civilians.
+/// Greedily allocate remaining military to nodes with lowest per-unit military cost,
+/// limited by each node's empty slots.
+fn upper_bound_pure_mil(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
+    let mut cur_mil = 0i32;
+    let mut empties: Vec<(f64, i32)> = Vec::with_capacity(st.0.len());
+    let civ_den = st.0.iter().map(|ns| ns.civ as i32).sum::<i32>().max(1) as f64;
+    for (ns, nd) in st.0.iter().zip(nodes.iter()) {
+        cur_mil += ns.mil as i32;
+        let used = ns.civ as i32 + ns.mil as i32;
+        let empty = ((nd.slots as i32) - used).max(0);
+        if empty > 0 {
+            let unit = 7200.0 / infra_mult(ns.infra) / civ_den;
+            empties.push((unit, empty));
+        }
+    }
+    let mut need = (target - cur_mil).max(0);
+    if need == 0 {
+        return 0.0;
+    }
+    // allocate to cheapest nodes first
+    empties.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
+    let mut ub = 0.0;
+    for (unit, cap) in empties {
+        if need == 0 {
+            break;
+        }
+        let take = cap.min(need);
+        ub += (take as f64) * unit;
+        need -= take;
+    }
+    // If need remains > 0, capacity is insufficient; treat as infinite UB.
+    if need > 0 { f64::INFINITY } else { ub }
+}
+
 /// Generate feasible successors for a state.
 ///
 /// Yields tuples of (node_index, action_label, next_state, step_cost).
@@ -222,6 +257,8 @@ fn solve_and_reconstruct(
     parent_idx.push(None);
     let h0 = heuristic(&st, &desc, target_military);
     open.push(start_idx, h0);
+    // Global best known solution cost (upper bound). Initialize with pure-military plan from start.
+    let mut best_ub = upper_bound_pure_mil(&st, &desc, target_military);
     let mut expanded: usize = 0;
     let mut goal_i: Option<usize> = None;
     let mut goal_g: f64 = 0.0;
@@ -242,8 +279,17 @@ fn solve_and_reconstruct(
             let _ = io::stdout().flush();
         }
         let cur = &states[cur_idx];
+        // Anytime pruning: if even the greedy pure-mil completion cannot beat best_ub, skip.
+        let ub_suffix = upper_bound_pure_mil(cur, &desc, target_military);
+        if cur_g + ub_suffix >= best_ub {
+            continue;
+        }
         if is_terminal(cur, target_military) {
             goal_g = cur_g;
+            // tighten upper bound
+            if goal_g < best_ub {
+                best_ub = goal_g;
+            }
             goal_i = Some(cur_idx);
             break;
         }
