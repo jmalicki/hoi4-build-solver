@@ -13,12 +13,12 @@
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 //
 use pyo3::prelude::*;
+use rapidhash::RandomState as RapidHasher;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::io::{self, Write};
-use rapidhash::RandomState as RapidHasher;
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]
@@ -76,7 +76,9 @@ fn heuristic(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
         empty += ((nd.slots as i32) - used).max(0);
     }
     let remaining = (target - cur_mil).max(0);
-    if remaining == 0 { return 0.0; }
+    if remaining == 0 {
+        return 0.0;
+    }
     let civ_upper = (sum_civ + (empty - remaining).max(0)).max(1) as f64;
     let best_mult = 1.0 + (2.0 * 5.0) / 10.0;
     let per_unit = (7200.0f64.min(4000.0)) / best_mult / civ_upper;
@@ -84,7 +86,9 @@ fn heuristic(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
 }
 
 /// Compute infrastructure multiplier for a given level in [0,5].
-fn infra_mult(infra: u8) -> f64 { 1.0 + (2.0 * (infra as f64)) / 10.0 }
+fn infra_mult(infra: u8) -> f64 {
+    1.0 + (2.0 * (infra as f64)) / 10.0
+}
 
 /// Generate feasible successors for a state.
 ///
@@ -131,10 +135,22 @@ fn iter_successors<'a>(
 /// A* binary heap item: (f=g+h, g, tie-counter, state).
 #[derive(Clone)]
 struct HeapItem(f64, f64, usize, State);
-impl PartialEq for HeapItem { fn eq(&self, o: &Self) -> bool { self.0.eq(&o.0) } }
+impl PartialEq for HeapItem {
+    fn eq(&self, o: &Self) -> bool {
+        self.0.eq(&o.0)
+    }
+}
 impl Eq for HeapItem {}
-impl PartialOrd for HeapItem { fn partial_cmp(&self, o: &Self) -> Option<Ordering> { o.0.partial_cmp(&self.0) } }
-impl Ord for HeapItem { fn cmp(&self, o: &Self) -> Ordering { self.partial_cmp(o).unwrap_or(Ordering::Equal) } }
+impl PartialOrd for HeapItem {
+    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
+        o.0.partial_cmp(&self.0)
+    }
+}
+impl Ord for HeapItem {
+    fn cmp(&self, o: &Self) -> Ordering {
+        self.partial_cmp(o).unwrap_or(Ordering::Equal)
+    }
+}
 
 /// Solve the problem and reconstruct the plan in one call (Python API).
 ///
@@ -148,8 +164,19 @@ impl Ord for HeapItem { fn cmp(&self, o: &Self) -> Ordering { self.partial_cmp(o
 /// - moves: list of (nodeName, actionLabel)
 /// - final_state: list of per-node triples (infra, civ, mil)
 /// - total_cost: cost along the optimal plan
+/// solve_and_reconstruct(nodes, target_military, *, verbose=True, print_every=1)
+///
+/// Python entry point. Types:
+/// - nodes: list[tuple[str, int, int, int, int]]
+/// - target_military: int
+/// - verbose: bool (kw-only)
+/// - print_every: int (kw-only)
+/// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
-#[pyo3(signature = (nodes, target_military, verbose=true, print_every=1)]
+#[pyo3(
+    signature = (nodes, target_military, *, verbose=true, print_every=1),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_military: int, *, verbose: bool = True, print_every: int = 1) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+)]
 fn solve_and_reconstruct(
     _py: Python<'_>,
     nodes: Vec<(String, i32, i32, i32, i32)>,
@@ -159,7 +186,10 @@ fn solve_and_reconstruct(
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     fn to_u8(_py: Python<'_>, v: i32, field: &str, max: u8) -> PyResult<u8> {
         if v < 0 || v as u32 > max as u32 {
-            Err(pyo3::exceptions::PyValueError::new_err(format!("{} out of range (0..={})", field, max)))
+            Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "{} out of range (0..={})",
+                field, max
+            )))
         } else {
             Ok(v as u8)
         }
@@ -168,20 +198,24 @@ fn solve_and_reconstruct(
     let mut desc: Vec<NodeDesc> = Vec::with_capacity(nodes.len());
     for t in &nodes {
         let slots = to_u8(_py, t.1, "numSlots", 255)?;
-        desc.push(NodeDesc{ slots });
+        desc.push(NodeDesc { slots });
     }
     let mut st_vec: Vec<NodeState> = Vec::with_capacity(nodes.len());
     for t in &nodes {
         let infra = to_u8(_py, t.2, "numInfra", 5)?;
         let civ = to_u8(_py, t.3, "numCivilian", 255)?;
         let mil = to_u8(_py, t.4, "numMilitary", 255)?;
-        st_vec.push(NodeState{ infra, civ, mil });
+        st_vec.push(NodeState { infra, civ, mil });
     }
     let st = State(st_vec);
 
     // Feasibility quick check
     let total_slots: i32 = desc.iter().map(|d| d.slots as i32).sum();
-    if target_military > total_slots { return Err(pyo3::exceptions::PyValueError::new_err("target exceeds capacity")); }
+    if target_military > total_slots {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "target exceeds capacity",
+        ));
+    }
 
     let mut open = BinaryHeap::new();
     let mut counter: usize = 0;
@@ -192,7 +226,8 @@ fn solve_and_reconstruct(
     // For a child state s, stores (prev_state, node_index, action_label, step_cost)
     // that achieved the current best g(s). This enables an O(path_len) reverse walk
     // from the goal to the start once the search finishes.
-    let mut parent: HashMap<State, (State, usize, &'static str, f64), RapidHasher> = HashMap::with_hasher(RapidHasher::new());
+    let mut parent: HashMap<State, (State, usize, &'static str, f64), RapidHasher> =
+        HashMap::with_hasher(RapidHasher::new());
     g_best.insert(st.clone(), 0.0);
     let h0 = heuristic(&st, &desc, target_military);
     open.push(HeapItem(h0, 0.0, counter, st.clone()));
@@ -201,7 +236,12 @@ fn solve_and_reconstruct(
     let mut goal: Option<State> = None;
     let mut goal_g: f64 = 0.0;
     if verbose {
-        println!("[A*] start: heap={} target={} print_every={}", open.len(), target_military, print_every);
+        println!(
+            "[A*] start: heap={} target={} print_every={}",
+            open.len(),
+            target_military,
+            print_every
+        );
         let _ = io::stdout().flush();
     }
     while let Some(HeapItem(_f, g, _c, cur)) = open.pop() {
@@ -215,7 +255,9 @@ fn solve_and_reconstruct(
             goal = Some(cur.clone());
             break;
         }
-        if g > *g_best.get(&cur).unwrap_or(&f64::INFINITY) { continue; }
+        if g > *g_best.get(&cur).unwrap_or(&f64::INFINITY) {
+            continue;
+        }
         for (idx, act, ns, cost) in iter_successors(&cur, &desc) {
             let tentative = g + cost;
             if tentative < *g_best.get(&ns).unwrap_or(&f64::INFINITY) {
@@ -243,21 +285,27 @@ fn solve_and_reconstruct(
             );
             let _ = io::stdout().flush();
         }
-        let final_state: Vec<(i32,i32,i32)> = goal_state
+        let final_state: Vec<(i32, i32, i32)> = goal_state
             .0
             .iter()
             .map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32))
             .collect();
         Ok((moves, final_state, goal_g))
     } else {
-        Err(pyo3::exceptions::PyRuntimeError::new_err("A* exhausted without finding a goal"))
+        Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "A* exhausted without finding a goal",
+        ))
     }
 }
 
+/// Python module initializer for `hoi4_mdp_core`.
 #[pymodule]
 fn hoi4_mdp_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+    // Module docstring
+    m.setattr(
+        "__doc__",
+        "Rust A* core for HOI4 MDP: solve_and_reconstruct(nodes, target_military, *, verbose=True, print_every=1)",
+    )?;
     m.add_function(wrap_pyfunction!(solve_and_reconstruct, m)?)?;
     Ok(())
 }
-
-
