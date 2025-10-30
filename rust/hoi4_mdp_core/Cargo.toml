@@ -11,5 +11,6 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.27.1", features = ["extension-module", "abi3-py310"] }
 smallvec = "1.13"
 rapidhash = "4.1.1"
+orx-priority-queue = "1.9"
 
 

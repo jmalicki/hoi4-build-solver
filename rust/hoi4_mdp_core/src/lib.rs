@@ -12,11 +12,13 @@
 // - Heuristic is an admissible lower bound using best-case infra and an upper
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 //
+use orx_priority_queue::{
+    PriorityQueueDecKey, PriorityQueueX, QuaternaryHeapOfIndices, VecPositions,
+};
 use pyo3::prelude::*;
 use rapidhash::fast::RandomState as RapidHasher;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
-use std::collections::BinaryHeap;
 use std::collections::HashMap;
 use std::io::{self, Write};
 
@@ -138,26 +140,6 @@ fn iter_successors<'a>(
     })
 }
 
-/// A* binary heap item: (f=g+h, g, tie-counter, state).
-#[derive(Clone)]
-struct HeapItem(f64, f64, usize, State);
-impl PartialEq for HeapItem {
-    fn eq(&self, o: &Self) -> bool {
-        self.0.eq(&o.0)
-    }
-}
-impl Eq for HeapItem {}
-impl PartialOrd for HeapItem {
-    fn partial_cmp(&self, o: &Self) -> Option<Ordering> {
-        o.0.partial_cmp(&self.0)
-    }
-}
-impl Ord for HeapItem {
-    fn cmp(&self, o: &Self) -> Ordering {
-        self.partial_cmp(o).unwrap_or(Ordering::Equal)
-    }
-}
-
 /// Solve the problem and reconstruct the plan in one call (Python API).
 ///
 /// Parameters (Python side):
@@ -223,23 +205,25 @@ fn solve_and_reconstruct(
         ));
     }
 
-    let mut open = BinaryHeap::new();
-    let mut counter: usize = 0;
-    // g_best: best-known exact cost-so-far g(s) for each discovered state s.
-    // Used to avoid revisiting states with worse cost and to compute the final total cost.
-    let mut g_best: HashMap<State, f64, RapidHasher> = HashMap::with_hasher(RapidHasher::new());
-    // parent: backpointer map for path reconstruction.
-    // For a child state s, stores (prev_state, node_index, action_label, step_cost)
-    // that achieved the current best g(s). This enables an O(path_len) reverse walk
-    // from the goal to the start once the search finishes.
-    let mut parent: HashMap<State, (State, usize, &'static str, f64), RapidHasher> =
+    // Dense state index map and frontier with decrease_key.
+    let mut states: Vec<State> = Vec::new();
+    let mut state_to_idx: HashMap<State, usize, RapidHasher> =
         HashMap::with_hasher(RapidHasher::new());
-    g_best.insert(st.clone(), 0.0);
+    let mut g: Vec<f64> = Vec::new();
+    let mut parent_idx: Vec<Option<(usize, usize, &'static str, f64)>> = Vec::new();
+    let mut open: QuaternaryHeapOfIndices<f64, VecPositions> =
+        QuaternaryHeapOfIndices::new(None, VecPositions::new());
+
+    // seed start state
+    let start_idx = 0usize;
+    states.push(st.clone());
+    state_to_idx.insert(st.clone(), start_idx);
+    g.push(0.0);
+    parent_idx.push(None);
     let h0 = heuristic(&st, &desc, target_military);
-    open.push(HeapItem(h0, 0.0, counter, st.clone()));
-    counter += 1;
+    open.push(start_idx, h0);
     let mut expanded: usize = 0;
-    let mut goal: Option<State> = None;
+    let mut goal_i: Option<usize> = None;
     let mut goal_g: f64 = 0.0;
     if verbose {
         println!(
@@ -250,36 +234,50 @@ fn solve_and_reconstruct(
         );
         let _ = io::stdout().flush();
     }
-    while let Some(HeapItem(_f, g, _c, cur)) = open.pop() {
+    while let Some((cur_idx, _cur_f)) = open.pop_min() {
         expanded += 1;
+        let cur_g = g[cur_idx];
         if verbose && (expanded == 1 || (print_every > 0 && expanded % print_every == 0)) {
-            println!("[A*] iters={} g={:.4} heap={}", expanded, g, open.len());
+            println!("[A*] iters={} g={:.4} heap={}", expanded, cur_g, open.len());
             let _ = io::stdout().flush();
         }
-        if is_terminal(&cur, target_military) {
-            goal_g = *g_best.get(&cur).unwrap_or(&g);
-            goal = Some(cur.clone());
+        let cur = &states[cur_idx];
+        if is_terminal(cur, target_military) {
+            goal_g = cur_g;
+            goal_i = Some(cur_idx);
             break;
         }
-        if g > *g_best.get(&cur).unwrap_or(&f64::INFINITY) {
-            continue;
-        }
-        for (idx, act, ns, cost) in iter_successors(&cur, &desc) {
-            let tentative = g + cost;
-            if tentative < *g_best.get(&ns).unwrap_or(&f64::INFINITY) {
-                g_best.insert(ns.clone(), tentative);
-                parent.insert(ns.clone(), (cur.clone(), idx, act, cost));
-                let h = heuristic(&ns, &desc, target_military);
-                open.push(HeapItem(tentative + h, tentative, counter, ns));
-                counter += 1;
+        for (nid, act, ns, cost) in iter_successors(cur, &desc) {
+            let ns_idx = match state_to_idx.get(&ns) {
+                Some(&i) => i,
+                None => {
+                    let i = states.len();
+                    states.push(ns.clone());
+                    state_to_idx.insert(ns.clone(), i);
+                    g.push(f64::INFINITY);
+                    parent_idx.push(None);
+                    i
+                }
+            };
+            let tentative = cur_g + cost;
+            if tentative < g[ns_idx] {
+                g[ns_idx] = tentative;
+                parent_idx[ns_idx] = Some((cur_idx, nid, act, cost));
+                let h = heuristic(&states[ns_idx], &desc, target_military);
+                let f = tentative + h;
+                if open.contains(&ns_idx) {
+                    open.decrease_key(&ns_idx, f);
+                } else {
+                    open.push(ns_idx, f);
+                }
             }
         }
     }
-    if let Some(goal_state) = goal {
-        // reconstruct once, outside the loop
+    if let Some(gi) = goal_i {
+        // reconstruct
         let mut moves: Vec<(String, String)> = Vec::new();
-        let mut walk = goal_state.clone();
-        while let Some((prev, idx, act, _)) = parent.get(&walk).cloned() {
+        let mut walk = gi;
+        while let Some((prev, idx, act, _)) = parent_idx[walk] {
             moves.push((names[idx].clone(), act.to_string()));
             walk = prev;
         }
@@ -291,7 +289,7 @@ fn solve_and_reconstruct(
             );
             let _ = io::stdout().flush();
         }
-        let final_state: Vec<(i32, i32, i32)> = goal_state
+        let final_state: Vec<(i32, i32, i32)> = states[gi]
             .0
             .iter()
             .map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32))
