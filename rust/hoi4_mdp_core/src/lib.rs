@@ -79,10 +79,16 @@ fn heuristic(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
     if remaining == 0 {
         return 0.0;
     }
+    // Optimistic denominator bound (global), as in docs/MODELING.md
     let civ_upper = (sum_civ + (empty - remaining).max(0)).max(1) as f64;
     let best_mult = 1.0 + (2.0 * 5.0) / 10.0;
-    let per_unit = (7200.0f64.min(4000.0)) / best_mult / civ_upper;
-    (remaining as f64) * per_unit
+
+    // Tighter base-cost blend: at most current civilians can be converted at 4000 base.
+    // The rest must be built as military at 7200 base.
+    let conv_usable = remaining.min(sum_civ);
+    let mil_needed = remaining - conv_usable;
+    let blended_base = (4000.0 * (conv_usable as f64)) + (7200.0 * (mil_needed as f64));
+    blended_base / best_mult / civ_upper
 }
 
 /// Compute infrastructure multiplier for a given level in [0,5].
