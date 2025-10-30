@@ -13,7 +13,7 @@
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 //
 use pyo3::prelude::*;
-use rapidhash::RandomState as RapidHasher;
+use rapidhash::fast::RandomState as RapidHasher;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
