@@ -1,0 +1,14 @@
+[project]
+name = "hoi4_mdp_core"
+version = "0.1.0"
+description = "Rust A* core for HOI4 MDP solver (PyO3 extension)"
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["maturin>=1,<2"]
+build-backend = "maturin"
+
+[tool.maturin]
+module-name = "hoi4_mdp_core"
+features = ["pyo3/extension-module"]
+

@@ -1,0 +1,10 @@
+nodeName,numSlots,numInfra,numCivilian,numMilitary
+Moscow,12,4,0,12
+Leningrad,7,3,0,7
+Voronezh,3,2,0,1
+Ulyanovsky,4,2,0,1
+Sverdlovsk,6,2,0,3
+Chernigov,6,2,0,0
+Ural'sk,2,0,0,0
+Chelyabinsk,4,2,0,1
+Magnitogorsk,2,0,0,0

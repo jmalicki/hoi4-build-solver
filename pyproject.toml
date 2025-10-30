@@ -1,0 +1,33 @@
+[project]
+name = "hoi4-mdp-solver"
+version = "0.1.0"
+description = "MDP solver for HOI4-style build planning with CSV I/O"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Joseph Malicki" }]
+dependencies = [
+  "hoi4_mdp_core",
+  "pymdptoolbox>=4.0b3",
+  "numpy>=1.26",
+  "scipy>=1.11",
+  "pandas>=2.0",
+  "click>=8.1",
+]
+
+[project.scripts]
+hoi4-mdp-solve = "mdp_solver.__main__:main"
+
+[tool.uv]
+dev-dependencies = []
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "rust/hoi4_mdp_core/Cargo.toml" },
+  { file = "rust/hoi4_mdp_core/**/*.rs" }
+]
+
+[tool.uv.sources]
+hoi4_mdp_core = { path = "rust/hoi4_mdp_core", editable = true }
+
+
+
+
