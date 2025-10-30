@@ -197,8 +197,8 @@ fn iter_successors<'a>(
 /// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
 #[pyo3(
-    signature = (nodes, target_military, *, verbose=true, print_every=1),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_military: int, *, verbose: bool = True, print_every: int = 1) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    signature = (nodes, target_military, *, verbose=true, print_every=1, re_prune=false),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_military: int, *, verbose: bool = True, print_every: int = 1, re_prune: bool = False) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
@@ -206,6 +206,7 @@ fn solve_and_reconstruct(
     target_military: i32,
     verbose: bool,
     print_every: usize,
+    re_prune: bool,
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     fn to_u8(_py: Python<'_>, v: i32, field: &str, max: u8) -> PyResult<u8> {
         if v < 0 || v as u32 > max as u32 {
@@ -342,7 +343,7 @@ fn solve_and_reconstruct(
         }
 
         // Periodic heap re-prune against the current best upper bound by rebuilding.
-        if print_every > 0 && expanded % (print_every * 5) == 0 {
+        if re_prune && print_every > 0 && expanded % (print_every * 5) == 0 {
             let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(open.len());
             while let Some((i, f)) = open.pop_min() {
                 if f < best_ub {

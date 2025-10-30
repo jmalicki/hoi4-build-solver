@@ -19,4 +19,5 @@ def solve_and_reconstruct(
     *,
     verbose: bool = ..., 
     print_every: int = ...,
+    re_prune: bool = ...,
 ) -> Tuple[List[Tuple[str, str]], List[Tuple[int, int, int]], float]: ...
