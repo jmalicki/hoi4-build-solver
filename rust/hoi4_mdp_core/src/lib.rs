@@ -98,6 +98,18 @@ fn infra_mult(infra: u8) -> f64 {
     1.0 + (2.0 * (infra as f64)) / 10.0
 }
 
+fn fmt_count(n: usize) -> String {
+    if n >= 1_000_000_000 {
+        format!("{:.1}B", (n as f64) / 1_000_000_000.0)
+    } else if n >= 1_000_000 {
+        format!("{:.1}M", (n as f64) / 1_000_000.0)
+    } else if n >= 1_000 {
+        format!("{:.1}K", (n as f64) / 1_000.0)
+    } else {
+        n.to_string()
+    }
+}
+
 /// Upper bound: finish by first converting civilians to military, then building military.
 /// - Conversion stage: up to min(remaining, total_civ), choose cheapest nodes by 4000/mult.
 ///   The global denominator decreases by 1 per conversion.
@@ -332,14 +344,10 @@ fn solve_and_reconstruct(
             } else {
                 0.0
             };
+            let heap_pretty = fmt_count(open.len());
             println!(
                 "[A*] iters={} g={:.4} heap={} avg_f={:.4} pruned_pre={} pruned_rebuild={}",
-                expanded,
-                cur_g,
-                open.len(),
-                heap_avg_f,
-                pruned_before_insert,
-                pruned_in_rebuild
+                expanded, cur_g, heap_pretty, heap_avg_f, pruned_before_insert, pruned_in_rebuild
             );
             let _ = io::stdout().flush();
         }
