@@ -309,6 +309,8 @@ fn solve_and_reconstruct(
     let mut expanded: usize = 0;
     let mut goal_i: Option<usize> = None;
     let mut goal_g: f64 = 0.0;
+    let mut pruned_before_insert: usize = 0;
+    let mut pruned_in_rebuild: usize = 0;
     if verbose {
         println!(
             "[A*] start: heap={} target={} print_every={}",
@@ -331,11 +333,13 @@ fn solve_and_reconstruct(
                 0.0
             };
             println!(
-                "[A*] iters={} g={:.4} heap={} avg_f={:.4}",
+                "[A*] iters={} g={:.4} heap={} avg_f={:.4} pruned_pre={} pruned_rebuild={}",
                 expanded,
                 cur_g,
                 open.len(),
-                heap_avg_f
+                heap_avg_f,
+                pruned_before_insert,
+                pruned_in_rebuild
             );
             let _ = io::stdout().flush();
         }
@@ -372,6 +376,11 @@ fn solve_and_reconstruct(
                 parent_idx[ns_idx] = Some((cur_idx, nid, act, cost));
                 let h = heuristic(&states[ns_idx], &desc, target_military);
                 let f = tentative + h;
+                // prune neighbors exceeding current upper bound before insert/decrease
+                if f >= best_ub {
+                    pruned_before_insert += 1;
+                    continue;
+                }
                 if open.contains(&ns_idx) {
                     if let Some(old) = open.priority_of(&ns_idx) {
                         heap_sum_f += f - *old;
@@ -391,6 +400,8 @@ fn solve_and_reconstruct(
             while let Some((i, f)) = open.pop_min() {
                 if f < best_ub {
                     tmp.push((i, f));
+                } else {
+                    pruned_in_rebuild += 1;
                 }
             }
             heap_sum_f = 0.0;
