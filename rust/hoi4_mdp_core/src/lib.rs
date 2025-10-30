@@ -257,6 +257,9 @@ fn solve_and_reconstruct(
     parent_idx.push(None);
     let h0 = heuristic(&st, &desc, target_military);
     open.push(start_idx, h0);
+    // Track exact running mean of f (g+h) for entries currently in the heap.
+    let mut heap_sum_f: f64 = h0;
+    let mut heap_len: usize = 1;
     // Global best known solution cost (upper bound). Initialize with pure-military plan from start.
     let mut best_ub = upper_bound_pure_mil(&st, &desc, target_military);
     let mut expanded: usize = 0;
@@ -271,11 +274,25 @@ fn solve_and_reconstruct(
         );
         let _ = io::stdout().flush();
     }
-    while let Some((cur_idx, _cur_f)) = open.pop_min() {
+    while let Some((cur_idx, cur_f)) = open.pop_min() {
+        // update heap mean on pop
+        heap_sum_f -= cur_f;
+        heap_len -= 1;
         expanded += 1;
         let cur_g = g[cur_idx];
         if verbose && (expanded == 1 || (print_every > 0 && expanded % print_every == 0)) {
-            println!("[A*] iters={} g={:.4} heap={}", expanded, cur_g, open.len());
+            let heap_avg_f = if heap_len > 0 {
+                heap_sum_f / (heap_len as f64)
+            } else {
+                0.0
+            };
+            println!(
+                "[A*] iters={} g={:.4} heap={} avg_f={:.4}",
+                expanded,
+                cur_g,
+                open.len(),
+                heap_avg_f
+            );
             let _ = io::stdout().flush();
         }
         let cur = &states[cur_idx];
@@ -312,10 +329,32 @@ fn solve_and_reconstruct(
                 let h = heuristic(&states[ns_idx], &desc, target_military);
                 let f = tentative + h;
                 if open.contains(&ns_idx) {
+                    if let Some(old) = open.priority_of(&ns_idx) {
+                        heap_sum_f += f - *old;
+                    }
                     open.decrease_key(&ns_idx, f);
                 } else {
                     open.push(ns_idx, f);
+                    heap_sum_f += f;
+                    heap_len += 1;
                 }
+            }
+        }
+
+        // Periodic heap re-prune against the current best upper bound by rebuilding.
+        if print_every > 0 && expanded % (print_every * 5) == 0 {
+            let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(open.len());
+            while let Some((i, f)) = open.pop_min() {
+                if f < best_ub {
+                    tmp.push((i, f));
+                }
+            }
+            heap_sum_f = 0.0;
+            heap_len = 0;
+            for (i, f) in tmp {
+                open.push(i, f);
+                heap_sum_f += f;
+                heap_len += 1;
             }
         }
     }
