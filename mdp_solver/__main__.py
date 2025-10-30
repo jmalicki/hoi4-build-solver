@@ -107,8 +107,9 @@ def main(input_path: str | None, sheet_url: str | None, target_military: int, mo
     # Immediate banner to confirm run start before entering the solver
     print(f"[A*] invoking rust core: target={target_military}, nodes={len(rust_nodes)}", flush=True)
     moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
-        rust_nodes, int(target_military), True, 1
-    )  # type: ignore
+        rust_nodes, int(target_military), verbose=True, print_every=1,
+        prune=False,
+    )
     goal_state = tuple((int(i), int(c), int(m)) for (i, c, m) in final_state_vec)
 
     # Write moves CSV

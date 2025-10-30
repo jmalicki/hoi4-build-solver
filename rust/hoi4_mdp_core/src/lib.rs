@@ -12,14 +12,14 @@
 // - Heuristic is an admissible lower bound using best-case infra and an upper
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 //
-use orx_priority_queue::{
-    PriorityQueueDecKey, PriorityQueueX, QuaternaryHeapOfIndices, VecPositions,
-};
+use orx_priority_queue::{PriorityQueue, PriorityQueueDecKey, QuaternaryHeapOfIndices};
 use pyo3::prelude::*;
 use rapidhash::fast::RandomState as RapidHasher;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+// Add HashSet for tracking membership
+use std::collections::HashSet;
 use std::io::{self, Write};
 
 /// Static descriptor of a node (immutable across search).
@@ -264,8 +264,8 @@ fn iter_successors<'a>(
 /// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
 #[pyo3(
-    signature = (nodes, target_military, *, verbose=true, print_every=1, re_prune=false),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_military: int, *, verbose: bool = True, print_every: int = 1, re_prune: bool = False) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    signature = (nodes, target_military, *, verbose=true, print_every=1, prune=false),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_military: int, *, verbose: bool = True, print_every: int = 1, prune: bool = False) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
@@ -273,7 +273,7 @@ fn solve_and_reconstruct(
     target_military: i32,
     verbose: bool,
     print_every: usize,
-    re_prune: bool,
+    prune: bool,
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     fn to_u8(_py: Python<'_>, v: i32, field: &str, max: u8) -> PyResult<u8> {
         if v < 0 || v as u32 > max as u32 {
@@ -314,8 +314,10 @@ fn solve_and_reconstruct(
         HashMap::with_hasher(RapidHasher::new());
     let mut g: Vec<f64> = Vec::new();
     let mut parent_idx: Vec<Option<(usize, usize, &'static str, f64)>> = Vec::new();
-    let mut open: QuaternaryHeapOfIndices<f64, VecPositions> =
-        QuaternaryHeapOfIndices::new(None, VecPositions::new());
+    let mut open: QuaternaryHeapOfIndices<usize, f64> =
+        QuaternaryHeapOfIndices::with_index_bound(1_000_000);
+    let mut in_open: HashSet<usize> = HashSet::new();
+    let mut heap_prio: Vec<Option<f64>> = Vec::new();
 
     // seed start state
     let start_idx = 0usize;
@@ -324,7 +326,9 @@ fn solve_and_reconstruct(
     g.push(0.0);
     parent_idx.push(None);
     let h0 = heuristic(&st, &desc, target_military);
-    open.push(start_idx, h0);
+    open.push(start_idx, -h0);
+    in_open.insert(start_idx);
+    heap_prio.push(Some(-h0));
     // Track exact running mean of f (g+h) for entries currently in the heap.
     let mut heap_sum_f: f64 = h0;
     let mut heap_len: usize = 1;
@@ -333,8 +337,7 @@ fn solve_and_reconstruct(
     let mut expanded: usize = 0;
     let mut goal_i: Option<usize> = None;
     let mut goal_g: f64 = 0.0;
-    let mut pruned_before_insert: usize = 0;
-    let mut pruned_in_rebuild: usize = 0;
+    let mut pruned: usize = 0;
     if verbose {
         let pe = fmt_step(print_every);
         println!(
@@ -345,12 +348,24 @@ fn solve_and_reconstruct(
         );
         let _ = io::stdout().flush();
     }
-    while let Some((cur_idx, cur_f)) = open.pop_min() {
+    while let Some((cur_idx, cur_p)) = open.pop() {
         // update heap mean on pop
+        let cur_f = -cur_p;
         heap_sum_f -= cur_f;
         heap_len -= 1;
+        in_open.remove(&cur_idx);
+        if cur_idx < heap_prio.len() {
+            heap_prio[cur_idx] = None;
+        }
         expanded += 1;
         let cur_g = g[cur_idx];
+        let cur = &states[cur_idx];
+        // Check terminal before any pruning
+        if is_terminal(cur, target_military) {
+            goal_g = cur_g;
+            goal_i = Some(cur_idx);
+            break;
+        }
         if verbose && (expanded == 1 || (print_every > 0 && expanded % print_every == 0)) {
             let heap_avg_f = if heap_len > 0 {
                 heap_sum_f / (heap_len as f64)
@@ -358,28 +373,25 @@ fn solve_and_reconstruct(
                 0.0
             };
             let heap_pretty = fmt_count(open.len());
-            println!(
-                "[A*] iters={} g={:.4} heap={} avg_f={:.4} pruned_pre={} pruned_rebuild={}",
-                expanded, cur_g, heap_pretty, heap_avg_f, pruned_before_insert, pruned_in_rebuild
+            let msg = format!(
+                "[A*] iters={} g={:.4} heap={} avg_f={:.4} pruned={}",
+                expanded, cur_g, heap_pretty, heap_avg_f, pruned
             );
+            println!("{}", msg);
             let _ = io::stdout().flush();
         }
-        let cur = &states[cur_idx];
-        // Anytime pruning: if even the greedy pure-mil completion cannot beat best_ub, skip.
-        let ub_suffix = upper_bound_convert_then_mil(cur, &desc, target_military);
-        if cur_g + ub_suffix >= best_ub {
-            continue;
-        }
-        if is_terminal(cur, target_military) {
-            goal_g = cur_g;
-            // tighten upper bound
-            if goal_g < best_ub {
-                best_ub = goal_g;
+        if prune {
+            // Anytime pruning: tighten UB opportunistically, then prune.
+            let ub_suffix = upper_bound_convert_then_mil(cur, &desc, target_military);
+            let candidate_total = cur_g + ub_suffix;
+            if candidate_total <= best_ub {
+                best_ub = candidate_total;
+            } else {
+                continue;
             }
-            goal_i = Some(cur_idx);
-            break;
         }
-        for (nid, act, ns, cost) in iter_successors(cur, &desc) {
+        let succs: Vec<(usize, &'static str, State, f64)> = iter_successors(cur, &desc).collect();
+        for (nid, act, ns, cost) in succs {
             let ns_idx = match state_to_idx.get(&ns) {
                 Some(&i) => i,
                 None => {
@@ -388,6 +400,7 @@ fn solve_and_reconstruct(
                     state_to_idx.insert(ns.clone(), i);
                     g.push(f64::INFINITY);
                     parent_idx.push(None);
+                    heap_prio.push(None);
                     i
                 }
             };
@@ -397,42 +410,52 @@ fn solve_and_reconstruct(
                 parent_idx[ns_idx] = Some((cur_idx, nid, act, cost));
                 let h = heuristic(&states[ns_idx], &desc, target_military);
                 let f = tentative + h;
-                // prune neighbors exceeding current upper bound before insert/decrease
-                if f >= best_ub {
-                    pruned_before_insert += 1;
-                    continue;
-                }
-                if open.contains(&ns_idx) {
-                    if let Some(old) = open.priority_of(&ns_idx) {
-                        heap_sum_f += f - *old;
+                if prune {
+                    // prune neighbors exceeding current upper bound before insert/decrease
+                    let ub_ns = upper_bound_convert_then_mil(&ns, &desc, target_military);
+                    if tentative + ub_ns > best_ub {
+                        pruned += 1;
+                        continue;
+                    } else {
+                        best_ub = tentative + ub_ns;
                     }
-                    open.decrease_key(&ns_idx, f);
+                }
+                if in_open.contains(&ns_idx) {
+                    if let Some(old_neg) = heap_prio.get(ns_idx).and_then(|o| *o) {
+                        let old_true = -old_neg;
+                        heap_sum_f += f - old_true;
+                    }
+                    open.decrease_key(&ns_idx, -f);
+                    if ns_idx < heap_prio.len() {
+                        heap_prio[ns_idx] = Some(-f);
+                    }
                 } else {
-                    open.push(ns_idx, f);
+                    open.push(ns_idx, -f);
+                    in_open.insert(ns_idx);
                     heap_sum_f += f;
                     heap_len += 1;
+                    if ns_idx < heap_prio.len() {
+                        heap_prio[ns_idx] = Some(-f);
+                    }
                 }
             }
         }
-
-        // Periodic heap re-prune against the current best upper bound by rebuilding.
-        if re_prune && print_every > 0 && expanded % (print_every * 5) == 0 {
-            let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(open.len());
-            while let Some((i, f)) = open.pop_min() {
-                if f < best_ub {
-                    tmp.push((i, f));
-                } else {
-                    pruned_in_rebuild += 1;
-                }
-            }
-            heap_sum_f = 0.0;
-            heap_len = 0;
-            for (i, f) in tmp {
-                open.push(i, f);
-                heap_sum_f += f;
-                heap_len += 1;
-            }
-        }
+    }
+    if verbose {
+        let heap_avg_f = if heap_len > 0 {
+            heap_sum_f / (heap_len as f64)
+        } else {
+            0.0
+        };
+        let heap_pretty = fmt_count(open.len());
+        // Reuse cadence format; use goal_g if available, else 0.0. Show best_ub as candidate_total.
+        let final_g = goal_i.map(|_| goal_g).unwrap_or(0.0);
+        let msg = format!(
+            "[A*] final_iters={} g={:.4} heap={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
+            expanded, final_g, heap_pretty, heap_avg_f, pruned, best_ub,
+        );
+        println!("{}", msg);
+        let _ = io::stdout().flush();
     }
     if let Some(gi) = goal_i {
         // reconstruct
@@ -457,6 +480,20 @@ fn solve_and_reconstruct(
             .collect();
         Ok((moves, final_state, goal_g))
     } else {
+        if verbose {
+            let heap_avg_f = if heap_len > 0 {
+                heap_sum_f / (heap_len as f64)
+            } else {
+                0.0
+            };
+            let heap_pretty = fmt_count(open.len());
+            let msg = format!(
+                "[A*] final_iters={} g={:.4} heap={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
+                expanded, 0.0, heap_pretty, heap_avg_f, pruned, best_ub,
+            );
+            println!("{}", msg);
+            let _ = io::stdout().flush();
+        }
         Err(pyo3::exceptions::PyRuntimeError::new_err(
             "A* exhausted without finding a goal",
         ))
