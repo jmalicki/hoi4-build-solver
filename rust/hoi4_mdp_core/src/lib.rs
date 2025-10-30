@@ -98,38 +98,81 @@ fn infra_mult(infra: u8) -> f64 {
     1.0 + (2.0 * (infra as f64)) / 10.0
 }
 
-/// Upper bound: finish by building only military using current infra and civilians.
-/// Greedily allocate remaining military to nodes with lowest per-unit military cost,
-/// limited by each node's empty slots.
-fn upper_bound_pure_mil(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
+/// Upper bound: finish by first converting civilians to military, then building military.
+/// - Conversion stage: up to min(remaining, total_civ), choose cheapest nodes by 4000/mult.
+///   The global denominator decreases by 1 per conversion.
+/// - Build stage: allocate remaining to cheapest nodes by 7200/mult, limited by empties,
+///   using the (post-conversion) civilian denominator which is constant during builds.
+fn upper_bound_convert_then_mil(st: &State, nodes: &[NodeDesc], target: i32) -> f64 {
     let mut cur_mil = 0i32;
-    let mut empties: Vec<(f64, i32)> = Vec::with_capacity(st.0.len());
-    let civ_den = st.0.iter().map(|ns| ns.civ as i32).sum::<i32>().max(1) as f64;
+    let mut total_civ = 0i32;
+    let mut empties_per_node: Vec<(f64, f64, i32, i32)> = Vec::with_capacity(st.0.len());
+    // store (conv_unit_num, build_unit_num, civ_count, empty_slots)
     for (ns, nd) in st.0.iter().zip(nodes.iter()) {
         cur_mil += ns.mil as i32;
+        total_civ += ns.civ as i32;
         let used = ns.civ as i32 + ns.mil as i32;
         let empty = ((nd.slots as i32) - used).max(0);
-        if empty > 0 {
-            let unit = 7200.0 / infra_mult(ns.infra) / civ_den;
-            empties.push((unit, empty));
-        }
+        let conv_num = 4000.0 / infra_mult(ns.infra); // denominator applied later
+        let build_num = 7200.0 / infra_mult(ns.infra);
+        empties_per_node.push((conv_num, build_num, ns.civ as i32, empty));
     }
     let mut need = (target - cur_mil).max(0);
     if need == 0 {
         return 0.0;
     }
-    // allocate to cheapest nodes first
-    empties.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-    let mut ub = 0.0;
-    for (unit, cap) in empties {
+
+    // Conversion stage
+    let conv_cap = need.min(total_civ);
+    let mut ub = 0.0f64;
+    if conv_cap > 0 {
+        // sort by cheapest conversion numerator
+        empties_per_node.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
+        let mut conv_done = 0i32;
+        let mut civ_den = total_civ.max(1) as f64;
+        let mut i = 0usize;
+        while conv_done < conv_cap {
+            // advance to next node with civ available
+            while i < empties_per_node.len() && empties_per_node[i].2 <= 0 {
+                i += 1;
+            }
+            if i >= empties_per_node.len() {
+                break;
+            }
+            let (conv_num, _build_num, civ_cnt, _empty) = empties_per_node[i];
+            if civ_cnt <= 0 {
+                break;
+            }
+            // perform one conversion on this node
+            ub += conv_num / civ_den;
+            // update this node's civ count and global denominator
+            empties_per_node[i].2 -= 1;
+            conv_done += 1;
+            civ_den = (civ_den - 1.0).max(1.0);
+        }
+        need -= conv_done;
+    }
+    if need == 0 {
+        return ub;
+    }
+
+    // Build stage
+    // civ_den after conversions is total_civ - conv_done (>=1 unless 0)
+    let post_civ_den = (total_civ - (target - cur_mil - need)).max(1) as f64;
+    // collect build candidates with their empties
+    let mut builds: Vec<(f64, i32)> = empties_per_node.iter().map(|t| (t.1, t.3)).collect();
+    builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
+    for (build_num, cap) in builds {
         if need == 0 {
             break;
         }
+        if cap <= 0 {
+            continue;
+        }
         let take = cap.min(need);
-        ub += (take as f64) * unit;
+        ub += (take as f64) * (build_num / post_civ_den);
         need -= take;
     }
-    // If need remains > 0, capacity is insufficient; treat as infinite UB.
     if need > 0 { f64::INFINITY } else { ub }
 }
 
@@ -262,7 +305,7 @@ fn solve_and_reconstruct(
     let mut heap_sum_f: f64 = h0;
     let mut heap_len: usize = 1;
     // Global best known solution cost (upper bound). Initialize with pure-military plan from start.
-    let mut best_ub = upper_bound_pure_mil(&st, &desc, target_military);
+    let mut best_ub = upper_bound_convert_then_mil(&st, &desc, target_military);
     let mut expanded: usize = 0;
     let mut goal_i: Option<usize> = None;
     let mut goal_g: f64 = 0.0;
@@ -298,7 +341,7 @@ fn solve_and_reconstruct(
         }
         let cur = &states[cur_idx];
         // Anytime pruning: if even the greedy pure-mil completion cannot beat best_ub, skip.
-        let ub_suffix = upper_bound_pure_mil(cur, &desc, target_military);
+        let ub_suffix = upper_bound_convert_then_mil(cur, &desc, target_military);
         if cur_g + ub_suffix >= best_ub {
             continue;
         }
