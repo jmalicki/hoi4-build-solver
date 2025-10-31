@@ -21,7 +21,7 @@ pub mod py;
 mod state_pool;
 
 /// Static descriptor of a node (immutable across search).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct NodeDesc {
     slots: u8, // 0..=255
 }
