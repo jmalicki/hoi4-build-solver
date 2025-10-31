@@ -39,8 +39,8 @@ struct ConstructionItem {
 }
 ```
 
-**Both factory allocation and infra multiplier are implicit**:
-When processing the queue:
+**Both factory allocation and infra multiplier are implicit**: When processing
+the queue:
 
 - **Factory allocation**: Computed in FIFO order (first item gets min(15,
   remaining_factories), etc.)
@@ -114,14 +114,14 @@ After adding a construction item, check factory allocation:
    - For each item, compute effective completion time using **current** infra
      level at that node:
 
- - $\text{effective\_time} =
+- $\text{effective\_time} =
    \dfrac{\text{cost\_remaining}}{\text{current\_infra\_mult}
    \times\;\text{factories\_allocated}}$
 - Find the item with minimum `effective_time` (next to complete)
 - Let $\delta_t$ be that minimum effective time (ensures no
   $\text{cost\_remaining}$ goes negative)
- - For each item, reduce its $\text{cost\_remaining}$ by
-   $\delta_t \times \text{current\_infra\_mult} \times
+- For each item, reduce its $\text{cost\_remaining}$ by
+  $\delta_t \times \text{current\_infra\_mult} \times
    \text{factories\_allocated}$
   (time advances for all)
 - **Invariant**: $\text{cost\_remaining} \ge 0$ (at least one item will have
@@ -157,7 +157,7 @@ Each `Successor` contains:
 
 The existing "cost" formula is actually time:
 
- - $\dfrac{\text{base\_cost}}{\text{infra\_multiplier} \times
+- $\dfrac{\text{base\_cost}}{\text{infra\_multiplier} \times
    \text{total\_civilian}}$
 - This represents time to complete given factory allocation
 
@@ -174,8 +174,8 @@ For the construction queue:
 - When advancing time:
   - $\delta_t =
     \min\left(\dfrac{\text{cost\_remaining}}{\text{infra\_mult}
-    \times\;\text{factories\_allocated}}\right)$ across all queue
-    items
+    \times\;\text{factories\_allocated}}\right)$
+    across all queue items
   - For each item:
     $\text{cost\_remaining} = \text{cost\_remaining} -\left(\delta_t
     \times\;\text{current\_infra\_mult}

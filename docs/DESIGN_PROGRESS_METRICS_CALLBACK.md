@@ -71,8 +71,7 @@ def solve_and_reconstruct(
     # if progress is not None: wrap into SolveOptions.progress; return True from callback to stop
 ```
 
-- If `progress` is provided, disable internal printing; user decides
-  verbosity.
+- If `progress` is provided, disable internal printing; user decides verbosity.
 - Backward compatible: if `progress is None`, keep existing banner/final line
   printing for now (deprecated path), or disable printing entirely and only use
   the callback path.

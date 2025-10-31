@@ -527,7 +527,7 @@ jobs:
 
 Add to the top of `README.md`:
 
-````markdown
+`````markdown
 # HOI4 Build Solver
 
 [![CI](https://github.com/jmalicki/hoi4-buildsolve/actions/workflows/ci.yml/badge.svg)](https://github.com/jmalicki/hoi4-buildsolve/actions/workflows/ci.yml)
@@ -574,7 +574,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-
 
 **Update `pyproject.toml`** to reference the license:
 
@@ -709,3 +708,5 @@ Configure in GitHub repository settings:
 **Note**: This document is a planning document and will not be committed to the
 repository as per user requirements. It serves as a reference for implementing
 the CI/CD setup.
+````
+`````
