@@ -18,12 +18,14 @@ use std::cmp::Ordering;
 use std::io::{self, Write};
 
 mod heap_growth;
+mod heuristic;
 mod state_pool;
 use state_pool::{StatePool, StateHandle};
+use heuristic::{Heuristic, create_by_name};
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]
-struct NodeDesc {
+pub(crate) struct NodeDesc {
     slots: u8, // 0..=255
 }
 
@@ -48,7 +50,7 @@ pub(crate) struct State(pub(crate) Vec<NodeState>);
 
 /// Target type for the MDP goal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum TargetType {
+pub(crate) enum TargetType {
     Military,
     Civilian,
     Factories, // Total factories (military + civilian)
@@ -86,69 +88,6 @@ fn is_terminal(st: &State, target_type: TargetType, target: i32) -> bool {
     }
 }
 
-/// Admissible heuristic h(s): optimistic lower bound on remaining cost.
-///
-/// This heuristic matches docs/MODELING.md. It assumes:
-/// - Best-case infra multiplier (as if infra=5 on the acting node), and
-/// - civUpper = current civilians + max(0, emptySlots - remaining) as an
-///   upper bound for the denominator effect.
-///
-/// Returns: non-negative lower bound on the optimal remaining cost from `st`.
-fn heuristic(st: &State, nodes: &[NodeDesc], target_type: TargetType, target: i32) -> f64 {
-    let mut cur_mil = 0i32;
-    let mut cur_civ = 0i32;
-    let mut sum_civ = 0i32;
-    let mut empty = 0i32;
-    for (ns, nd) in st.0.iter().zip(nodes.iter()) {
-        cur_mil += ns.mil as i32;
-        cur_civ += ns.civ as i32;
-        sum_civ += ns.civ as i32;
-        let used = ns.civ as i32 + ns.mil as i32;
-        empty += ((nd.slots as i32) - used).max(0);
-    }
-
-    let remaining = match target_type {
-        TargetType::Military => (target - cur_mil).max(0),
-        TargetType::Civilian => (target - cur_civ).max(0),
-        TargetType::Factories => (target - (cur_mil + cur_civ)).max(0),
-    };
-
-    if remaining == 0 {
-        return 0.0;
-    }
-
-    // Optimistic denominator bound (global), as in docs/MODELING.md
-    let civ_upper = (sum_civ + (empty - remaining).max(0)).max(1) as f64;
-    let best_mult = 1.0 + (2.0 * 5.0) / 10.0;
-
-    match target_type {
-        TargetType::Military => {
-            // Tighter base-cost blend: at most current civilians can be converted at 4000 base.
-            // The rest must be built as military at 7200 base.
-            let conv_usable = remaining.min(sum_civ);
-            let mil_needed = remaining - conv_usable;
-            let blended_base = (4000.0 * (conv_usable as f64)) + (7200.0 * (mil_needed as f64));
-            blended_base / best_mult / civ_upper
-        }
-        TargetType::Civilian => {
-            // For civilian factories, we can only build (not convert).
-            // Base cost is 10800 for civilian factories.
-            let blended_base = 10800.0 * (remaining as f64);
-            blended_base / best_mult / civ_upper
-        }
-        TargetType::Factories => {
-            // For total factories, conversions don't change the count, so we must build new factories.
-            // Build the cheapest type (military is cheaper than civilian).
-            let blended_base = 7200.0 * (remaining as f64); // Use military cost (cheapest)
-            blended_base / best_mult / civ_upper
-        }
-    }
-}
-
-/// Compute infrastructure multiplier for a given level in [0,5].
-fn infra_mult(infra: u8) -> f64 {
-    1.0 + (2.0 * (infra as f64)) / 10.0
-}
 
 fn fmt_count(n: usize) -> String {
     if n >= 1_000_000_000 {
@@ -174,135 +113,6 @@ fn fmt_step(n: usize) -> String {
     }
 }
 
-/// Upper bound: finish by first converting civilians to military (if applicable), then building.
-///
-/// Strategy depends on target type:
-/// - Military: convert civilians to military, then build military
-/// - Civilian: build civilian factories only
-/// - Factories: convert then build (any mix counts toward total)
-///
-/// - Conversion stage (for military/factories): up to min(remaining, total_civ), choose cheapest nodes by 4000/mult.
-///   The global denominator decreases by 1 per conversion.
-/// - Build stage: allocate remaining to cheapest nodes by build cost/mult, limited by empties,
-///   using the (post-conversion) civilian denominator which is constant during builds.
-fn upper_bound_convert_then_mil(
-    st: &State,
-    nodes: &[NodeDesc],
-    target_type: TargetType,
-    target: i32,
-) -> f64 {
-    let mut cur_mil = 0i32;
-    let mut cur_civ = 0i32;
-    let mut total_civ = 0i32;
-    let mut empties_per_node: Vec<(f64, f64, f64, i32, i32)> = Vec::with_capacity(st.0.len());
-    // store (conv_unit_num, build_mil_num, build_civ_num, civ_count, empty_slots)
-    for (ns, nd) in st.0.iter().zip(nodes.iter()) {
-        cur_mil += ns.mil as i32;
-        cur_civ += ns.civ as i32;
-        total_civ += ns.civ as i32;
-        let used = ns.civ as i32 + ns.mil as i32;
-        let empty = ((nd.slots as i32) - used).max(0);
-        let mult = infra_mult(ns.infra);
-        let conv_num = 4000.0 / mult; // denominator applied later
-        let build_mil_num = 7200.0 / mult;
-        let build_civ_num = 10800.0 / mult;
-        empties_per_node.push((conv_num, build_mil_num, build_civ_num, ns.civ as i32, empty));
-    }
-
-    let mut need = match target_type {
-        TargetType::Military => (target - cur_mil).max(0),
-        TargetType::Civilian => (target - cur_civ).max(0),
-        TargetType::Factories => (target - (cur_mil + cur_civ)).max(0),
-    };
-
-    if need == 0 {
-        return 0.0;
-    }
-
-    match target_type {
-        TargetType::Military => {
-            // Convert civilians to military, then build military
-            let mut ub = 0.0f64;
-            let conv_cap = need.min(total_civ);
-            let mut empties = empties_per_node.clone();
-
-            // Conversion stage
-            if conv_cap > 0 {
-                empties.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-                let mut conv_done = 0i32;
-                let mut civ_den = total_civ.max(1) as f64;
-                let mut i = 0usize;
-                while conv_done < conv_cap {
-                    while i < empties.len() && empties[i].3 <= 0 {
-                        i += 1;
-                    }
-                    if i >= empties.len() || empties[i].3 <= 0 {
-                        break;
-                    }
-                    let (conv_num, _, _, _, _) = empties[i];
-                    ub += conv_num / civ_den;
-                    empties[i].3 -= 1;
-                    conv_done += 1;
-                    civ_den = (civ_den - 1.0).max(1.0);
-                }
-                need -= conv_done;
-            }
-
-            if need == 0 {
-                return ub;
-            }
-
-            // Build military stage
-            let post_civ_den = (total_civ - conv_cap).max(1) as f64;
-            let mut builds: Vec<(f64, i32)> = empties.iter().map(|t| (t.1, t.4)).collect();
-            builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-            for (build_num, cap) in builds {
-                if need == 0 || cap <= 0 {
-                    break;
-                }
-                let take = cap.min(need);
-                ub += (take as f64) * (build_num / post_civ_den);
-                need -= take;
-            }
-            if need > 0 { f64::INFINITY } else { ub }
-        }
-        TargetType::Civilian => {
-            // Build civilian factories only
-            let civ_den = total_civ.max(1) as f64;
-            let mut builds: Vec<(f64, i32)> = empties_per_node.iter().map(|t| (t.2, t.4)).collect();
-            builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-            let mut ub = 0.0f64;
-            for (build_num, cap) in builds {
-                if need == 0 || cap <= 0 {
-                    break;
-                }
-                let take = cap.min(need);
-                ub += (take as f64) * (build_num / civ_den);
-                need -= take;
-            }
-            if need > 0 { f64::INFINITY } else { ub }
-        }
-        TargetType::Factories => {
-            // For total factories, conversions don't change the count, so we can't use conversions
-            // to reach the target. We can only build new factories.
-            // Optimize: build cheapest factories (military is cheaper than civilian at 7200 vs 10800)
-            let civ_den = total_civ.max(1) as f64;
-            // Sort by military cost (cheaper), use all empty slots for military first
-            let mut builds: Vec<(f64, i32)> = empties_per_node.iter().map(|t| (t.1, t.4)).collect();
-            builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
-            let mut ub = 0.0f64;
-            for (build_num, cap) in builds {
-                if need == 0 || cap <= 0 {
-                    break;
-                }
-                let take = cap.min(need);
-                ub += (take as f64) * (build_num / civ_den);
-                need -= take;
-            }
-            if need > 0 { f64::INFINITY } else { ub }
-        }
-    }
-}
 
 /// Information about a successor state generated from an action.
 #[derive(Clone)]
@@ -416,11 +226,13 @@ fn iter_successors<'a>(
 /// - target: int
 /// - verbose: bool (kw-only)
 /// - print_every: int (kw-only)
+/// - prune: bool (kw-only)
+/// - heuristic: str (kw-only, heuristic name)
 /// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
 #[pyo3(
-    signature = (nodes, target_type, target, *, verbose=false, print_every=1, prune=false),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, verbose: bool = False, print_every: int = 1, prune: bool = False) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    signature = (nodes, target_type, target, *, verbose=false, print_every=1, prune=false, heuristic="best_infra_upper_bound"),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, verbose: bool = False, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound') -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
@@ -430,6 +242,7 @@ fn solve_and_reconstruct(
     verbose: bool,
     print_every: usize,
     prune: bool,
+    heuristic: String,
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     // Parse target type
     let target_type_enum = match target_type.to_lowercase().as_str() {
@@ -478,15 +291,20 @@ fn solve_and_reconstruct(
         ));
     }
 
+    // Create heuristic by name
+    let heuristic_impl = create_by_name(&heuristic).map_err(|e| {
+        pyo3::exceptions::PyValueError::new_err(format!("Invalid heuristic: {}", e))
+    })?;
+
     // State pool for managing states, reference counting, index reuse, and the heap
     let initial_heap_bound = 10_000_000; // Start with 10M, will grow as needed
     let mut pool = StatePool::<State, TransitionInfo>::new(initial_heap_bound);
 
     // seed start state - enqueue normally (no parent)
-    let h0 = heuristic(&st, &desc, target_type_enum, target);
+    let h0 = heuristic_impl.lower_bound(&st, &desc, target_type_enum, target);
     pool.enqueue_or_update_state(st.clone(), 0.0, None, 0, None, h0);
     // Global best known solution cost (upper bound). Initialize with greedy plan from start.
-    let mut best_ub = upper_bound_convert_then_mil(&st, &desc, target_type_enum, target);
+    let mut best_ub = heuristic_impl.upper_bound(&st, &desc, target_type_enum, target);
     let mut expanded: usize = 0;
     let mut goal_i: Option<StateHandle<State, TransitionInfo>> = None;
     let mut goal_g: f64 = 0.0;
@@ -494,11 +312,12 @@ fn solve_and_reconstruct(
     if verbose {
         let pe = fmt_step(print_every);
         println!(
-            "[A*] start: heap={} target_type={:?} target={} print_every={}",
+            "[A*] start: heap={} target_type={:?} target={} print_every={} heuristic={}",
             pool.heap_size(),
             target_type_enum,
             target,
-            pe
+            pe,
+            heuristic_impl.name()
         );
         let _ = io::stdout().flush();
     }
@@ -535,7 +354,7 @@ fn solve_and_reconstruct(
             // Anytime pruning: tighten UB opportunistically, then prune.
             // We rerun this here in case we've observed a better upper bound since
             // we first enqueued the state.
-            let ub_suffix = upper_bound_convert_then_mil(cur, &desc, target_type_enum, target);
+            let ub_suffix = heuristic_impl.upper_bound(cur, &desc, target_type_enum, target);
             let candidate_total = cur_cost + ub_suffix;
             if candidate_total <= best_ub {
                 best_ub = candidate_total;
@@ -548,12 +367,12 @@ fn solve_and_reconstruct(
             let cost_value = cur_cost + successor.step_cost;
 
             // Compute heuristic for the successor state
-            let h = heuristic(&successor.next_state, &desc, target_type_enum, target);
+            let h = heuristic_impl.lower_bound(&successor.next_state, &desc, target_type_enum, target);
             let f = cost_value + h;
 
             if prune {
                 // prune neighbors exceeding current upper bound before enqueueing
-                let ub_ns = upper_bound_convert_then_mil(
+                let ub_ns = heuristic_impl.upper_bound(
                     &successor.next_state,
                     &desc,
                     target_type_enum,
