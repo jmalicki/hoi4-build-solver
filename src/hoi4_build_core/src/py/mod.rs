@@ -41,6 +41,7 @@ struct PySolverResult {
 }
 
 #[pyfunction]
+#[allow(clippy::too_many_arguments)]
 #[pyo3(
     signature = (nodes, target_type, target, *, print_every=1, prune=false, heuristic="best_infra_upper_bound", progress_callback=None),
     text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], bool]] = None) -> SolverResult"

@@ -371,7 +371,7 @@ mod tests {
         let s = TestState(42);
         let idx = pool.insert_state(s.clone());
         assert_eq!(pool.get_state(idx), Some(&s));
-        assert!(pool.is_active(idx) == false); // no refs yet
+        assert!(!pool.is_active(idx)); // no refs yet
     }
 
     #[test]

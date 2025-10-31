@@ -20,6 +20,7 @@ pub struct SolveOptions<'a, F: FnMut(&ProgressSnapshot) -> bool> {
     pub progress_cb: Option<F>,
 }
 
+#[allow(private_interfaces)]
 pub fn solve_and_reconstruct_core<F>(
     desc: Vec<NodeDesc>,
     start: State,

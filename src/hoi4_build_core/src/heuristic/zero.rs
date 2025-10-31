@@ -9,6 +9,7 @@ use crate::{NodeDesc, State, TargetType};
 #[derive(Clone, Copy, Debug)]
 pub struct ZeroHeuristic;
 
+#[allow(private_interfaces)]
 impl Heuristic for ZeroHeuristic {
     fn lower_bound(
         &self,
