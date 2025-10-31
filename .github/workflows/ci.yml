@@ -2,9 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feat/heap-growth-guards-abi-0.1.1
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - feat/heap-growth-guards-abi-0.1.1
 
 permissions:
   contents: read
@@ -201,4 +205,3 @@ jobs:
           name: rust-docs
           path: src/hoi4_build_core/target/doc
           retention-days: 30
-
