@@ -245,22 +245,21 @@ fn iter_successors<'a>(
 /// - nodes: list[tuple[str, int, int, int, int]]
 /// - target_type: str ("military", "civilian", or "factories")
 /// - target: int
-/// - verbose: bool (kw-only)
-/// - print_every: int (kw-only)
+/// - print_every: int (kw-only, cadence for progress callback; 0 disables)
 /// - prune: bool (kw-only)
 /// - heuristic: str (kw-only, heuristic name)
+/// - progress_callback: Optional[Callable[[ProgressSnapshot], None]] (kw-only)
 /// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
 #[pyo3(
-    signature = (nodes, target_type, target, *, verbose=false, print_every=1, prune=false, heuristic="best_infra_upper_bound", progress_callback=None),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, verbose: bool = False, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], None]] = None) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    signature = (nodes, target_type, target, *, print_every=1, prune=false, heuristic="best_infra_upper_bound", progress_callback=None),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], bool]] = None) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
     nodes: Vec<(String, i32, i32, i32, i32)>,
     target_type: String,
     target: i32,
-    verbose: bool,
     print_every: usize,
     prune: bool,
     heuristic: String,
@@ -332,23 +331,11 @@ fn solve_and_reconstruct(
     let mut goal_g: f64 = 0.0;
     let mut pruned: usize = 0;
     let use_progress_cb = progress_callback.is_some();
-    if verbose && !use_progress_cb {
-        let pe = fmt_step(print_every);
-        println!(
-            "[A*] start: heap={} target_type={:?} target={} print_every={} heuristic={}",
-            pool.heap_size(),
-            target_type_enum,
-            target,
-            pe,
-            heuristic_impl.name()
-        );
-        let _ = io::stdout().flush();
-    }
     // Helper to emit a progress snapshot via callback when provided
-    let mut maybe_emit_progress = |iters: usize, g: f64, pruned_c: usize, best_ub_val: f64| {
-        if !use_progress_cb { return; }
-        if print_every == 0 { return; }
-        if !(iters == 1 || iters.is_multiple_of(print_every)) { return; }
+    let mut maybe_emit_progress = |iters: usize, g: f64, pruned_c: usize, best_ub_val: f64| -> bool {
+        if !use_progress_cb { return false; }
+        if print_every == 0 { return false; }
+        if !(iters == 1 || iters.is_multiple_of(print_every)) { return false; }
         let snap = ProgressSnapshot {
             iterations: iters,
             cost_from_start: g,
@@ -359,10 +346,14 @@ fn solve_and_reconstruct(
             best_upper_bound: best_ub_val,
         };
         if let Some(cb) = &progress_callback {
-            Python::with_gil(|py| {
-                let _ = cb.call1((snap,));
+            return Python::with_gil(|py| {
+                match cb.call1((snap,)) {
+                    Ok(val) => val.extract::<bool>().unwrap_or(false),
+                    Err(_) => false,
+                }
             });
         }
+        false
     };
     while let Some(cur_handle) = pool.heap_pop() {
         // StateHandle guarantees the state is active - if we have a handle, it's valid.
@@ -381,19 +372,12 @@ fn solve_and_reconstruct(
             break;
         }
         if use_progress_cb {
-            maybe_emit_progress(expanded, cur_cost, pruned, best_ub);
-        } else if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
-            let heap_avg_f = pool.heap_avg_f();
-            let iters_pretty = fmt_count(expanded);
-            let heap_pretty = fmt_count(pool.heap_size());
-            let states_pretty = fmt_count(pool.total_states());
-            let pruned_pretty = fmt_count(pruned);
-            let msg = format!(
-                "[A*] iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={}",
-                iters_pretty, cur_cost, heap_pretty, states_pretty, heap_avg_f, pruned_pretty
-            );
-            println!("{}", msg);
-            let _ = io::stdout().flush();
+            let stop = maybe_emit_progress(expanded, cur_cost, pruned, best_ub);
+            if stop {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                    "Search stopped by progress callback",
+                ));
+            }
         }
         if prune {
             // Anytime pruning: tighten UB opportunistically, then prune.
@@ -454,21 +438,7 @@ fn solve_and_reconstruct(
         // cur_handle is dropped here at end of loop iteration
     }
     if use_progress_cb {
-        maybe_emit_progress(expanded, goal_i.is_some().then(|| goal_g).unwrap_or(0.0), pruned, best_ub);
-    } else if verbose {
-        let heap_avg_f = pool.heap_avg_f();
-        let iters_pretty = fmt_count(expanded);
-        let heap_pretty = fmt_count(pool.heap_size());
-        let states_pretty = fmt_count(pool.total_states());
-        let pruned_pretty = fmt_count(pruned);
-        // Reuse cadence format; use goal_g if available, else 0.0. Show best_ub as candidate_total.
-        let final_g = goal_i.is_some().then(|| goal_g).unwrap_or(0.0);
-        let msg = format!(
-            "[A*] iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
-            iters_pretty, final_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
-        );
-        println!("{}", msg);
-        let _ = io::stdout().flush();
+        let _ = maybe_emit_progress(expanded, goal_i.is_some().then(|| goal_g).unwrap_or(0.0), pruned, best_ub);
     }
     if let Some(goal_handle) = goal_i {
         // Extract final state before path reconstruction (since goal_handle will be moved)
