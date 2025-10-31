@@ -17,14 +17,16 @@
   - infra: `infraCost / infraMultiplier / sumCivilian`
   - convert: `conversionCost / infraMultiplier / sumCivilian`
 
-### A* heuristic
+### A* heuristic and pruning
 
-**See `rust/hoi4_mdp_core/src/heuristic/README.md` for detailed heuristic descriptions, theoretical background, and proofs of admissibility/consistency.**
+**See `rust/hoi4_mdp_core/src/heuristic/README.md` for detailed heuristic descriptions, theoretical background, and proofs of admissibility/consistency.** Also see `docs/PRUNING.md` for prune-before-enqueue and upper-bound strategy.
 
 The solver uses pluggable heuristics via the `Heuristic` trait. The default heuristic (`BestInfraUpperBoundHeuristic`) provides:
 
-- **Admissible lower bound**: An optimistic estimate using best-case infrastructure (infra=5) and an upper bound on civilians (`civUpper`) as the denominator
-- **Upper bound**: A greedy "convert then build" strategy used for pruning
+- **Admissible lower bound**: An optimistic estimate using best-case infrastructure (infra=5) and an upper bound on civilians (`civUpper`) as the denominator.
+- **Upper bound**: A greedy "convert then build" strategy used for pruning.
+
+We apply prune-before-enqueue: for each successor, if `g + h ≥ best_ub` (or component UBs say a branch cannot beat `best_ub`), we drop it without touching the heap or reference counts. See PRUNING.md for details and invariants.
 
 For complete details, implementation notes, and theoretical proofs, see the heuristic module README.
 
