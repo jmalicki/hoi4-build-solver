@@ -1,19 +1,24 @@
 # Pre-commit and CI Setup Plan
 
-This document outlines the plan for setting up pre-commit hooks, GitHub Actions CI, README badges, and MIT license for this repository. It is based on analysis of existing repositories under `github.com/jmalicki/`.
+This document outlines the plan for setting up pre-commit hooks, GitHub Actions
+CI, README badges, and MIT license for this repository. It is based on analysis
+of existing repositories under `github.com/jmalicki/`.
 
 ## Project Context
 
 This repository is a **Python + Rust (PyO3)** hybrid project:
+
 - **Python**: Primary interface using `uv` for dependency management
 - **Rust**: Core library (`hoi4_mdp_core`) compiled as a PyO3 extension module
-- **Structure**: Python CLI wrapper around Rust core for MDP solver functionality
+- **Structure**: Python CLI wrapper around Rust core for MDP solver
+  functionality
 
 ## 1. Pre-commit Hooks Configuration
 
 ### Recommended `.pre-commit-config.yaml`
 
-Based on patterns observed in `arsync`, `econ-graph`, and `apocalypse-now-essay` repositories:
+Based on patterns observed in `arsync`, `econ-graph`, and `apocalypse-now-essay`
+repositories:
 
 ```yaml
 # Pre-commit configuration for Python + Rust hybrid project
@@ -26,21 +31,21 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
-        exclude: '\.md$'  # Markdown may need trailing whitespace in some cases
+        exclude: '\.md$' # Markdown may need trailing whitespace in some cases
       - id: end-of-file-fixer
-        exclude: '\.(md|txt|mp4|aiff|wav)$'  # Some files shouldn't have newlines
+        exclude: '\.(md|txt|mp4|aiff|wav)$' # Some files shouldn't have newlines
       - id: check-yaml
-        args: ['--unsafe']  # Allow custom tags if needed
+        args: ["--unsafe"] # Allow custom tags if needed
       - id: check-json
-        exclude: 'package.*\.json$'  # package.json may have comments
+        exclude: 'package.*\.json$' # package.json may have comments
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ['--maxkb=5000']  # 5MB limit
+        args: ["--maxkb=5000"] # 5MB limit
       - id: mixed-line-ending
-        args: ['--fix=lf']  # Enforce LF line endings
+        args: ["--fix=lf"] # Enforce LF line endings
       - id: check-case-conflict
-      - id: check-docstring-first  # Python-specific
+      - id: check-docstring-first # Python-specific
       - id: detect-private-key
 
   # Python formatting and linting
@@ -49,7 +54,7 @@ repos:
     hooks:
       - id: black
         language_version: python3
-        args: ['--line-length=100']
+        args: ["--line-length=100"]
         files: '^src/py/.*\.py$'
 
   # Python linting (optional - consider ruff as alternative)
@@ -57,7 +62,7 @@ repos:
     rev: 7.0.0
     hooks:
       - id: flake8
-        args: ['--max-line-length=100', '--extend-ignore=E203,W503']
+        args: ["--max-line-length=100", "--extend-ignore=E203,W503"]
         files: '^src/py/.*\.py$'
 
   # Rust formatting
@@ -73,18 +78,24 @@ repos:
     rev: v0.1.67
     hooks:
       - id: clippy
-        args: [
-          --workspace,
-          --all-targets,
-          --all-features,
-          --no-deps,
-          --,
-          -D, warnings,
-          -D, clippy::missing_docs_in_private_items,
-          -D, clippy::missing_errors_doc,
-          -D, clippy::missing_panics_doc,
-          -D, clippy::must_use_candidate,
-        ]
+        args:
+          [
+            --workspace,
+            --all-targets,
+            --all-features,
+            --no-deps,
+            --,
+            -D,
+            warnings,
+            -D,
+            clippy::missing_docs_in_private_items,
+            -D,
+            clippy::missing_errors_doc,
+            -D,
+            clippy::missing_panics_doc,
+            -D,
+            clippy::must_use_candidate,
+          ]
         files: '^src/hoi4_mdp_core/.*\.rs$'
         pass_filenames: false
 
@@ -97,7 +108,7 @@ repos:
     rev: v1.4.0
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
+        args: ["--baseline", ".secrets.baseline"]
         exclude: 'uv\.lock$|Cargo\.lock$'
 
   # Markdown linting
@@ -105,7 +116,7 @@ repos:
     rev: v0.38.0
     hooks:
       - id: markdownlint
-        args: ['--config', '.markdownlint.json']
+        args: ["--config", ".markdownlint.json"]
         exclude: '^target/|^\.venv/'
 
   # Spell checking
@@ -114,9 +125,11 @@ repos:
     hooks:
       - id: codespell
         args: [
-          '-L', 'crate,the,nd',  # Extend ignore list as needed
-          '--skip', '*.lock,*.toml,target/,Cargo.lock,uv.lock',
-        ]
+            "-L",
+            "crate,the,nd", # Extend ignore list as needed
+            "--skip",
+            "*.lock,*.toml,target/,Cargo.lock,uv.lock",
+          ]
 
   # Shell script linting (if any shell scripts exist)
   - repo: https://github.com/jumanjihouse/pre-commit-hooks
@@ -124,7 +137,7 @@ repos:
     hooks:
       - id: shellcheck
       - id: shfmt
-        args: ['-w', '-s', '-i', '2']
+        args: ["-w", "-s", "-i", "2"]
 
   # Commit message linting (Conventional Commits)
   - repo: https://github.com/lint-commits-gitlint/commitlint
@@ -132,29 +145,32 @@ repos:
     hooks:
       - id: commitlint
         stages: [commit-msg]
-        args: ['--config', '.commitlintrc.yml']
+        args: ["--config", ".commitlintrc.yml"]
 
 # Global configuration
 default_install_hook_types: [pre-commit, pre-push]
-fail_fast: false  # Continue running hooks even if one fails
+fail_fast: false # Continue running hooks even if one fails
 minimum_pre_commit_version: "3.0.0"
 ```
 
 ### Required Configuration Files
 
 1. **`.commitlintrc.yml`** (for Conventional Commits):
+
 ```yaml
 extends:
-  - '@commitlint/config-conventional'
+  - "@commitlint/config-conventional"
 ```
 
 Optional (only if you prefer longer titles):
+
 ```yaml
 rules:
   header-max-length: [2, always, 100]
 ```
 
 2. **`.markdownlint.json`** (optional - if you want custom markdownlint rules):
+
 ```json
 {
   "default": true,
@@ -172,7 +188,8 @@ Rationale for temporary rule relaxations:
 Keep the config as strict as feasible. Remove any disable above if the docs can comply without compromising clarity.
 ```
 
-3. **`.secrets.baseline`** (for detect-secrets - generate with `detect-secrets scan --baseline .secrets.baseline`)
+3. **`.secrets.baseline`** (for detect-secrets - generate with
+   `detect-secrets scan --baseline .secrets.baseline`)
 
 ### Installation Instructions
 
@@ -195,7 +212,8 @@ pre-commit run --all-files
 
 ### Recommended Workflow Structure
 
-Based on patterns from `arsync`, `github-pr-automation-mcp`, and `diesel` repositories:
+Based on patterns from `arsync`, `github-pr-automation-mcp`, and `diesel`
+repositories:
 
 #### 2.1 Main CI Workflow (`.github/workflows/ci.yml`)
 
@@ -204,9 +222,9 @@ name: CI
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
   pull_request:
-    branches: ['main']
+    branches: ["main"]
   merge_group:
     types: [checks_requested]
 
@@ -235,8 +253,8 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: "3.10"
+          cache: "pip"
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -260,8 +278,9 @@ jobs:
         run: uv run black --check --line-length 100 src/py
 
       - name: Check Python linting (flake8)
-        run: uv run flake8 --max-line-length=100 --extend-ignore=E203,W503 src/py
-        continue-on-error: true  # Optional - can make required later
+        run:
+          uv run flake8 --max-line-length=100 --extend-ignore=E203,W503 src/py
+        continue-on-error: true # Optional - can make required later
 
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
@@ -285,7 +304,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install pre-commit
         run: pipx install pre-commit
@@ -333,7 +352,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ["3.10", "3.11", "3.12"]
         rust: [stable]
 
     steps:
@@ -343,7 +362,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: 'pip'
+          cache: "pip"
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -361,14 +380,16 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: cargo-${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          key:
+            cargo-${{ matrix.os }}-${{ matrix.rust }}-${{
+            hashFiles('**/Cargo.lock') }}
 
       - name: Build Rust extension
         run: uv run maturin develop --release
 
       - name: Run Python tests
         run: uv run pytest
-        continue-on-error: true  # Add once tests exist
+        continue-on-error: true # Add once tests exist
 
       - name: Run Rust tests
         run: cargo test --all-features --lib
@@ -436,11 +457,11 @@ name: CodeQL Security Analysis
 on:
   workflow_call:
   push:
-    branches: ['main']
+    branches: ["main"]
   pull_request:
-    branches: ['main']
+    branches: ["main"]
   schedule:
-    - cron: '0 3 * * 0'  # Weekly on Sundays at 3 AM UTC
+    - cron: "0 3 * * 0" # Weekly on Sundays at 3 AM UTC
 
 jobs:
   codeql-analysis:
@@ -452,18 +473,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ['python', 'rust']
+        language: ["python", "rust"]
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Full history for CodeQL
+          fetch-depth: 0 # Full history for CodeQL
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: "3.10"
         if: matrix.language == 'python'
 
       - name: Initialize CodeQL
@@ -487,7 +508,7 @@ name: Release
 
 on:
   push:
-    branches: ['main']
+    branches: ["main"]
 
 jobs:
   release-please:
@@ -506,7 +527,7 @@ jobs:
 
 Add to the top of `README.md`:
 
-```markdown
+````markdown
 # HOI4 Build Solver
 
 [![CI](https://github.com/jmalicki/hoi4-buildsolve/actions/workflows/ci.yml/badge.svg)](https://github.com/jmalicki/hoi4-buildsolve/actions/workflows/ci.yml)
@@ -522,8 +543,8 @@ Add to the top of `README.md`:
 ---
 
 [Rest of README content...]
-```markdown
 
+````markdown
 **Note**: Replace `jmalicki/hoi4-buildsolve` with the actual repository path.
 
 ## 4. MIT License
@@ -553,6 +574,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+````
+````
 
 **Update `pyproject.toml`** to reference the license:
 
@@ -573,6 +596,7 @@ license = "MIT"
 ### 5.1 Pre-commit.ci Integration
 
 Enable [pre-commit.ci](https://pre-commit.ci) in repository settings for:
+
 - Automatic updates of pre-commit hook versions
 - Automatic fixes on PRs (with approval)
 - Faster CI runs (cached hook environments)
@@ -581,6 +605,7 @@ Enable [pre-commit.ci](https://pre-commit.ci) in repository settings for:
 
 - **Python**: Already using `uv` (excellent choice)
 - **Rust**: Consider adding `deny.toml` for `cargo-deny` configuration:
+
   ```toml
   [bans]
   deny = ["RUSTSEC-*"]
@@ -603,7 +628,7 @@ coverage:
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: "3.10"
     - name: Install uv
       uses: astral-sh/setup-uv@v4
     - name: Install coverage tools
@@ -621,6 +646,7 @@ coverage:
 ### 5.4 Branch Protection Rules
 
 Configure in GitHub repository settings:
+
 - Require status checks to pass before merging
 - Require branches to be up to date before merging
 - Include: `code-quality`, `pre-commit`, `test`, `security`, `CodeQL`
@@ -630,7 +656,8 @@ Configure in GitHub repository settings:
 1. **Create MIT LICENSE file** (immediate)
 2. **Add `.pre-commit-config.yaml`** (with minimal hooks first, expand later)
 3. **Create `.commitlintrc.yml`** for Conventional Commits
-4. **Set up GitHub Actions workflows** (start with `ci.yml`, add others incrementally)
+4. **Set up GitHub Actions workflows** (start with `ci.yml`, add others
+   incrementally)
 5. **Update README.md with badges** (after workflows are running)
 6. **Enable pre-commit.ci** (optional but recommended)
 7. **Run `pre-commit run --all-files`** to fix existing issues
@@ -665,7 +692,8 @@ Configure in GitHub repository settings:
 ### Common Workflow Structure
 
 - **Early Fast Feedback**: Code quality checks (fmt, lint) run first
-- **Parallel Execution**: Tests, security, dependencies run in parallel after quality checks
+- **Parallel Execution**: Tests, security, dependencies run in parallel after
+  quality checks
 - **Documentation**: Built last, depends on successful tests
 - **Concurrency**: Use `cancel-in-progress: true` to avoid wasted CI minutes
 
@@ -679,4 +707,6 @@ Configure in GitHub repository settings:
 
 ---
 
-**Note**: This document is a planning document and will not be committed to the repository as per user requirements. It serves as a reference for implementing the CI/CD setup.
+**Note**: This document is a planning document and will not be committed to the
+repository as per user requirements. It serves as a reference for implementing
+the CI/CD setup.

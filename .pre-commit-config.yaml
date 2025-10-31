@@ -30,6 +30,21 @@ repos:
         args: ['--config', '.markdownlint.json']
         files: '^(README\.md|docs/.*\.md)$'
 
+  # Prettier for Markdown prose wrapping (auto-fix long lines)
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        name: prettier (markdown)
+        files: '^(README\.md|docs/.*\.md)$'
+        args:
+          - '--prose-wrap'
+          - 'always'
+          - '--print-width'
+          - '80'
+          - '--parser'
+          - 'markdown'
+
   # Spell checking (docs + README + Python sources)
   - repo: https://github.com/codespell-project/codespell
     rev: v2.3.0

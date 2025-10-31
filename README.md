@@ -2,7 +2,8 @@
 
 ## Setup with uv and virtualenv
 
-Prerequisites: Python 3.10+ and `uv` installed. Install uv from `https://docs.astral.sh/uv/getting-started/installation/`.
+Prerequisites: Python 3.10+ and `uv` installed. Install uv from
+`https://docs.astral.sh/uv/getting-started/installation/`.
 
 Create and activate a virtualenv managed by uv:
 
@@ -24,7 +25,8 @@ Input CSV must have columns:
 - numCivilian (int ≥ 0)
 - numMilitary (int ≥ 0)
 
-Optional columns (if present, they are subtracted from numSlots before modeling):
+Optional columns (if present, they are subtracted from numSlots before
+modeling):
 
 - Docks (int ≥ 0)
 - Refineries (int ≥ 0)
@@ -48,7 +50,8 @@ hoi4-mdp-solve \
 - `--moves-out`: where to write the action sequence
 - `--final-out`: where to write the final node states
 
-Alternatively, read directly from a Google Sheet (uses CSV export of the active tab):
+Alternatively, read directly from a Google Sheet (uses CSV export of the active
+tab):
 
 ```bash
 hoi4-mdp-solve \
@@ -62,5 +65,6 @@ Provide exactly one of `--input` or `--sheet-url`.
 
 ## Notes
 
-- Uses A* over an implicit state graph with an admissible, consistent heuristic; no full state enumeration.
+- Uses A\* over an implicit state graph with an admissible, consistent
+  heuristic; no full state enumeration.
 - Goal condition: sum(numMilitary) == target.
