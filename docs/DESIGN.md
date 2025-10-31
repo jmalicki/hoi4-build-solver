@@ -1,6 +1,7 @@
 # Design
 
-This document outlines the problem, modeling choices, algorithms, and interfaces for the HOI4 build solver.
+This document outlines the problem, modeling choices, algorithms, and
+interfaces for the HOI4 build solver.
 
 ## Problem in plain words
 
@@ -14,7 +15,9 @@ Each node also has an unchanging state parameter:
 
 - **numSlots**: capacity for factories on the node
 
-There is a global running **totalCost** that starts at 0. Across all nodes, we must always satisfy the constraint: **numMilitary + numCivilian ≤ numSlots** for each node.
+There is a global running **totalCost** that starts at 0.
+Across all nodes, we must always satisfy the constraint:
+**numMilitary + numCivilian ≤ numSlots** for each node.
 
 At each time step, we choose exactly one node and do one of four actions:
 
@@ -30,7 +33,9 @@ Fixed costs:
 - **militaryCost = 7200**
 - **conversionCost = 4000**
 
-The goal is to reach a state where the sum of military factories over all nodes equals a given **targetMilitary**, while minimizing **totalCost**. The program will take the initial list of nodes and their values, and produce:
+The goal is to reach a state where the sum of military factories over all
+nodes equals a given **targetMilitary**, while minimizing **totalCost**.
+The program will take the initial list of nodes and their values, and produce:
 
 - A sequence of moves like `(nodeName, "military")`, `(nodeName, "civilian")`, `(nodeName, "infra")`, `(nodeName, "convert")`
 - The final state in the same structure as the input

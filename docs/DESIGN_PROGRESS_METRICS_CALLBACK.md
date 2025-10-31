@@ -1,12 +1,17 @@
 # Progress and Metrics Callback Design
 
-Goal: Replace internal string printing with a callback-based progress reporting API usable by both Python (CLI) and WebAssembly (Web UI). The core remains free of UI/IO concerns.
+Goal: Replace internal string printing with a callback-based progress reporting API.
+It should be usable by both Python (CLI) and WebAssembly (Web UI).
+The core remains free of UI/IO concerns.
 
 ## Summary
 
 - Introduce a lightweight, read-only `ProgressSnapshot` struct in Rust capturing the same variables we currently print.
-- Core solver accepts an optional progress callback. When provided, it is invoked at a configurable cadence (replacing `verbose`/`print_every`).
-- Front-ends (Python CLI, Web UI) decide how to display/log (strings, tables, charts) based on the snapshot.
+- Core solver accepts an optional progress callback.
+  When provided, it is invoked at a configurable cadence
+  (replacing `verbose`/`print_every`).
+- Front-ends (Python CLI, Web UI) decide how to display/log
+  (strings, tables, charts) based on the snapshot.
 - No string formatting in the core; only data.
 
 ## Data Model
