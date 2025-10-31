@@ -21,6 +21,7 @@ pub trait Heuristic: Send + Sync {
     ///
     /// Must satisfy: h(s) <= actual optimal cost from s to goal
     /// Returns a non-negative value.
+    #[allow(private_interfaces)]
     fn lower_bound(
         &self,
         st: &State,
@@ -33,6 +34,7 @@ pub trait Heuristic: Send + Sync {
     ///
     /// Used for pruning: if g(s) + ub(s) > best_known_solution_cost,
     /// we can prune state s. Returns f64::INFINITY if no bound is known.
+    #[allow(private_interfaces)]
     fn upper_bound(
         &self,
         st: &State,

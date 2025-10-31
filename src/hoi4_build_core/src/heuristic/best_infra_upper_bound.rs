@@ -23,6 +23,7 @@ fn infra_mult(infra: u8) -> f64 {
 #[derive(Clone, Copy, Debug)]
 pub struct BestInfraUpperBoundHeuristic;
 
+#[allow(private_interfaces)]
 impl Heuristic for BestInfraUpperBoundHeuristic {
     /// Admissible lower bound: optimistic estimate using best-case infra and conversion awareness.
     fn lower_bound(
@@ -59,7 +60,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         // Using max infra (5) is valid for a lower bound: the infra multiplier appears in the
         // denominator, so using the maximum multiplier gives the minimum cost estimate, ensuring
         // the bound remains admissible (≤ actual cost).
-        let best_mult = 1.0 + (2.0 * 5.0) / 10.0;
+        // Calculate: 1.0 + (2.0 * 5.0) / 10.0 = 1.0 + 10.0 / 10.0 = 1.0 + 1.0 = 2.0
+        let best_mult = infra_mult(5);
 
         match target_type {
             TargetType::Military => {
