@@ -1,4 +1,4 @@
-### Running the HOI4 MDP Solver in the Browser via WebAssembly
+# Running the HOI4 MDP Solver in the Browser via WebAssembly
 
 This document explores making the solver available as a standalone web app (no backend) by compiling the Rust core to WebAssembly (WASM). Users would load a web page, choose options corresponding to the current CLI flags, and compute results entirely in-browser.
 

@@ -1,28 +1,37 @@
-### Problem in plain words
+# Design
+
+This document outlines the problem, modeling choices, algorithms, and interfaces for the HOI4 build solver.
+
+## Problem in plain words
 
 We have several named nodes. Each node tracks three changing state variables:
+
 - **numInfra**: infrastructure level per node in [0, 5]
 - **numCivilian**: number of civilian factories on the node (0 ≤ numCivilian ≤ numSlots)
 - **numMilitary**: number of military factories on the node (0 ≤ numMilitary ≤ numSlots)
 
 Each node also has an unchanging state parameter:
+
 - **numSlots**: capacity for factories on the node
 
 There is a global running **totalCost** that starts at 0. Across all nodes, we must always satisfy the constraint: **numMilitary + numCivilian ≤ numSlots** for each node.
 
 At each time step, we choose exactly one node and do one of four actions:
+
 - **civilian**: add 1 civilian on that node, cost = civilianCost / (1 + (2 · numInfra) / 10)
 - **military**: add 1 military on that node, cost = militaryCost / (1 + (2 · numInfra) / 10)
 - **infra**: add 1 infrastructure on that node, cost = infraCost / (1 + (2 · numInfra) / 10)
 - **convert**: convert 1 civilian → 1 military on that node (keeping civilian ≥ 0), cost = conversionCost / (1 + (2 · numInfra) / 10)
 
 Fixed costs:
+
 - **infraCost = 6000**
 - **civilianCost = 10800**
 - **militaryCost = 7200**
 - **conversionCost = 4000**
 
 The goal is to reach a state where the sum of military factories over all nodes equals a given **targetMilitary**, while minimizing **totalCost**. The program will take the initial list of nodes and their values, and produce:
+
 - A sequence of moves like `(nodeName, "military")`, `(nodeName, "civilian")`, `(nodeName, "infra")`, `(nodeName, "convert")`
 - The final state in the same structure as the input
 

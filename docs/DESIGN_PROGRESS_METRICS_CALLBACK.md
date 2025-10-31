@@ -1,4 +1,4 @@
-### Progress and Metrics Callback Design
+# Progress and Metrics Callback Design
 
 Goal: Replace internal string printing with a callback-based progress reporting API usable by both Python (CLI) and WebAssembly (Web UI). The core remains free of UI/IO concerns.
 

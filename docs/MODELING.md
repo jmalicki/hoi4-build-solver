@@ -1,4 +1,4 @@
-### Modeling details
+# Modeling details
 
 - **States**: A state encodes all nodes’ (`numInfra`, `numCivilian`, `numMilitary`). `numSlots` is per-node fixed input and not part of the dynamic state. `totalCost` is accumulated via per-action costs and is not a state variable. Terminal states satisfy `sum(numMilitary over nodes) = targetMilitary`.
   - Value ranges used by the implementation: `numInfra ∈ [0,5]`, `numCivilian ∈ [0,255]`, `numMilitary ∈ [0,255]`. The sum constraint `numCivilian + numMilitary ≤ numSlots` always holds.

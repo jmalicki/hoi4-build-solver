@@ -1,4 +1,6 @@
-### Setup with uv and virtualenv
+# HOI4 Build Solver
+
+## Setup with uv and virtualenv
 
 Prerequisites: Python 3.10+ and `uv` installed. Install uv from `https://docs.astral.sh/uv/getting-started/installation/`.
 
@@ -12,9 +14,10 @@ uv sync
 
 This installs dependencies from `pyproject.toml` into `.venv`.
 
-### CSV format
+## CSV format
 
 Input CSV must have columns:
+
 - nodeName (str)
 - numSlots (int ≥ 0)
 - numInfra (int in [0,5])
@@ -22,12 +25,13 @@ Input CSV must have columns:
 - numMilitary (int ≥ 0)
 
 Optional columns (if present, they are subtracted from numSlots before modeling):
+
 - Docks (int ≥ 0)
 - Refineries (int ≥ 0)
 
 Constraint per node: numMilitary + numCivilian ≤ numSlots.
 
-### Run the solver
+## Run the solver
 
 ```bash
 hoi4-mdp-solve \
@@ -37,7 +41,8 @@ hoi4-mdp-solve \
   --final-out final_state.csv
 ```
 
-Flags:
+### Flags
+
 - `--input`: path to input CSV
 - `--target`: target total military factories across all nodes
 - `--moves-out`: where to write the action sequence
@@ -55,7 +60,7 @@ hoi4-mdp-solve \
 
 Provide exactly one of `--input` or `--sheet-url`.
 
-### Notes
+## Notes
 
 - Uses A* over an implicit state graph with an admissible, consistent heuristic; no full state enumeration.
 - Goal condition: sum(numMilitary) == target.

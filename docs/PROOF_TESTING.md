@@ -1,6 +1,6 @@
-### Proof and Property Testing Strategy
+# Proof and Property Testing Strategy
 
-Scope
+## Scope
 
 - Validate core invariants used by pruning and heuristics:
   - Admissibility: `0 ≤ h(s) ≤ h*(s)`.
@@ -8,7 +8,7 @@ Scope
   - Safe pruning: `g+ub > best_ub ⇒ skip enqueue`.
   - Upper bound monotonicity: `best_ub` never increases.
 
-Layers
+## Layers
 
 1) Property-based testing (proptest)
    - Randomly generate valid small instances/states.
@@ -40,7 +40,7 @@ Layers
      - Non-negativity, monotonicity, and dominance relations for lower/upper-bound components.
    - Prefer Creusot/Prusti for Rust code; evaluate Verus for deeper proofs if acceptable to constrain subset.
 
-Workflow
+## Workflow
 
 - CI matrix:
   - cargo test (unit + proptest minimal cases).
@@ -48,7 +48,7 @@ Workflow
   - optional: kani proofs for tiny harnesses; creusot/prusti verification for spec modules (allow-failure at first).
   - nightly job: proptest with increased cases/timeouts.
 
-Roadmap
+## Roadmap
 
 - Phase 1: Expand proptest and contracts assertions; add tiny exact solvers.
 - Phase 2: Introduce Kani harnesses for prune decisions and bound arithmetic.
