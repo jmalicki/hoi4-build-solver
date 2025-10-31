@@ -28,10 +28,22 @@ struct PyProgressSnapshot {
     best_upper_bound: f64,
 }
 
+/// Result of solver execution, exposed to Python as a read-only class.
+#[pyclass]
+#[derive(Clone)]
+struct PySolverResult {
+    #[pyo3(get)]
+    moves: Vec<(String, String)>,
+    #[pyo3(get)]
+    final_state: Vec<(i32, i32, i32)>,
+    #[pyo3(get)]
+    total_cost: f64,
+}
+
 #[pyfunction]
 #[pyo3(
     signature = (nodes, target_type, target, *, print_every=1, prune=false, heuristic="best_infra_upper_bound", progress_callback=None),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], bool]] = None) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], bool]] = None) -> SolverResult"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
@@ -42,7 +54,7 @@ fn solve_and_reconstruct(
     prune: bool,
     heuristic: &str,
     progress_callback: Option<Bound<PyAny>>,
-) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
+) -> PyResult<PySolverResult> {
     // Parse target type
     let target_type_enum = match target_type.to_lowercase().as_str() {
         "military" => TargetType::Military,
@@ -124,7 +136,11 @@ fn solve_and_reconstruct(
         .into_iter()
         .map(|(i, action)| (names[i].clone(), action.to_string()))
         .collect();
-    Ok((moves, final_state, total_cost))
+    Ok(PySolverResult {
+        moves,
+        final_state,
+        total_cost,
+    })
 }
 
 #[pymodule]
@@ -134,6 +150,8 @@ fn hoi4_build_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "Rust A* core for HOI4 build solver: solve_and_reconstruct(nodes, target, *, print_every, prune, heuristic)",
     )?;
     m.add_function(wrap_pyfunction!(solve_and_reconstruct, m)?)?;
+    m.add_class::<PySolverResult>()?;
+    m.add_class::<PyProgressSnapshot>()?;
     m.add("SearchStoppedError", _py.get_type::<SearchStoppedError>())?;
     Ok(())
 }
