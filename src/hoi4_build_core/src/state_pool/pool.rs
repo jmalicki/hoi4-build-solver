@@ -63,6 +63,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
+    #[allow(dead_code)]
     pub fn insert_state(&mut self, state: S) -> usize {
         let idx = self.allocate_index();
         self.states[idx].state = state.clone();
@@ -136,9 +137,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn get_state(&self, idx: usize) -> Option<&S> {
         self.states.get(idx).map(|sm| &sm.state)
     }
+    #[allow(dead_code)]
     pub fn ref_count(&self, idx: usize) -> u32 {
         self.states.get(idx).map(|sm| sm.ref_count).unwrap_or(0)
     }
+    #[allow(dead_code)]
     pub fn is_active(&self, idx: usize) -> bool {
         idx < self.states.len() && self.states[idx].ref_count > 0
     }
@@ -148,6 +151,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             .map(|sm| sm.cost_from_start)
             .unwrap_or(f64::INFINITY)
     }
+    #[allow(dead_code)]
     pub fn set_initial_cost(&mut self, idx: usize, cost: f64) {
         if let Some(sm) = self.states.get_mut(idx) {
             sm.cost_from_start = cost;
@@ -172,9 +176,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn total_states(&self) -> usize {
         self.states.len()
     }
+    #[allow(dead_code)]
     pub fn used_states(&self) -> usize {
         self.states.len() - self.free_indices.len()
     }
+    #[allow(dead_code)]
     pub fn free_indices_count(&self) -> usize {
         self.free_indices.len()
     }
@@ -244,6 +250,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     fn is_in_heap(&self, idx: usize) -> bool {
         self.in_open.contains(&idx)
     }
+    #[allow(dead_code)]
     pub fn heap_len(&self) -> usize {
         self.heap_len
     }
@@ -257,15 +264,19 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn heap_size(&self) -> usize {
         self.open.len()
     }
+    #[allow(dead_code)]
     fn heap_mut_for_growth(&mut self) -> &mut QuaternaryHeapOfIndices<usize, f64> {
         &mut self.open
     }
+    #[allow(dead_code)]
     fn heap_bound(&self) -> usize {
         self.heap_bound
     }
+    #[allow(dead_code)]
     fn set_heap_bound(&mut self, new_bound: usize) {
         self.heap_bound = new_bound;
     }
+    #[allow(dead_code)]
     fn heap_bound_mut(&mut self) -> &mut usize {
         &mut self.heap_bound
     }
@@ -330,6 +341,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     }
 
     /// Create a handle for a given active index. Increments ref-count for the handle.
+    #[allow(dead_code)]
     pub fn make_handle(&mut self, idx: usize, cost: f64) -> StateHandle<S, T> {
         StateHandle::new(idx, cost, self)
     }

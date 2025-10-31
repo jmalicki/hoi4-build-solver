@@ -11,6 +11,7 @@ unsafe impl<S: Hash + Eq + Clone + Default, T> Send for StateHandle<S, T> {}
 unsafe impl<S: Hash + Eq + Clone + Default, T> Sync for StateHandle<S, T> {}
 
 impl<S: Hash + Eq + Clone + Default, T> StateHandle<S, T> {
+    #[allow(dead_code)]
     pub fn cost(&self) -> f64 {
         self.cost
     }

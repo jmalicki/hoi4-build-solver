@@ -51,39 +51,39 @@ where
             goal_i = Some(cur_handle);
             break;
         }
-        if let Some(cb) = opts.progress_cb.as_mut() {
-            if opts.print_every > 0 && (expanded == 1 || expanded % opts.print_every == 0) {
-                let snap = ProgressSnapshot {
-                    iterations: expanded,
-                    cost_from_start: cur_cost,
-                    heap_size: pool.heap_size(),
-                    total_states: pool.total_states(),
-                    avg_f: pool.heap_avg_f(),
-                    pruned,
-                    best_upper_bound: best_ub,
-                };
-                if cb(&snap) {
-                    // Early stop: return current frontier head path as best-effort using current node
-                    // Reconstruct moves from current handle
-                    let mut moves: Vec<(usize, &'static str)> = Vec::new();
-                    let mut walk = cur_handle;
-                    while let Some(parent_handle) = walk.parent(&mut pool) {
-                        let idx = walk.component_index(&pool).unwrap_or(0);
-                        let action = walk
-                            .transition_info(&pool)
-                            .map(|t| t.action)
-                            .unwrap_or("unknown");
-                        moves.push((idx, action));
-                        walk = parent_handle;
-                    }
-                    moves.reverse();
-                    return (
-                        moves,
-                        cur_state.clone(),
-                        cur_cost
-                            + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target),
-                    );
+        if let Some(cb) = opts.progress_cb.as_mut()
+            && opts.print_every > 0
+            && (expanded == 1 || expanded.is_multiple_of(opts.print_every))
+        {
+            let snap = ProgressSnapshot {
+                iterations: expanded,
+                cost_from_start: cur_cost,
+                heap_size: pool.heap_size(),
+                total_states: pool.total_states(),
+                avg_f: pool.heap_avg_f(),
+                pruned,
+                best_upper_bound: best_ub,
+            };
+            if cb(&snap) {
+                // Early stop: return current frontier head path as best-effort using current node
+                // Reconstruct moves from current handle
+                let mut moves: Vec<(usize, &'static str)> = Vec::new();
+                let mut walk = cur_handle;
+                while let Some(parent_handle) = walk.parent(&mut pool) {
+                    let idx = walk.component_index(&pool).unwrap_or(0);
+                    let action = walk
+                        .transition_info(&pool)
+                        .map(|t| t.action)
+                        .unwrap_or("unknown");
+                    moves.push((idx, action));
+                    walk = parent_handle;
                 }
+                moves.reverse();
+                return (
+                    moves,
+                    cur_state.clone(),
+                    cur_cost + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target),
+                );
             }
         }
         if opts.prune {
