@@ -5,7 +5,13 @@
 //
 // Structure: QuaternaryHeapOfIndices { heap: Heap { tree: Vec<(N, K)>, positions: HeapPositionsHasIndex { positions: Vec<usize>, ph: PhantomData } } }
 
-#![allow(clippy::all, unsafe_code, unused, missing_docs, clippy::missing_docs_in_private_items)]
+#![allow(
+    clippy::all,
+    unsafe_code,
+    unused,
+    missing_docs,
+    clippy::missing_docs_in_private_items
+)]
 
 use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
 /// # Safety
