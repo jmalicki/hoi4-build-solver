@@ -113,7 +113,7 @@ fn solve_and_reconstruct(
                 pruned: snap.pruned,
                 best_upper_bound: snap.best_upper_bound,
             };
-            Python::with_gil(|_py| match cb.call1((py_snap,)) {
+            Python::attach(|_py| match cb.call1((py_snap,)) {
                 Ok(val) => val.extract::<bool>().unwrap_or(false),
                 Err(_) => false,
             })
