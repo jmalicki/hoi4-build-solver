@@ -2,7 +2,8 @@
 
 ## Overview
 
-This document provides a detailed, actionable implementation plan with phases, specific goals, and checkboxes for investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is failing.
+This document provides a detailed, actionable implementation plan with phases, specific goals, and checkboxes for
+investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is failing.
 
 **Branch**: `investigate/proptest-failures` (or `investigate/prune-optimality-failure`)
 
@@ -44,7 +45,9 @@ This document provides a detailed, actionable implementation plan with phases, s
   }
   prev_best_ub = Some(best_ub);
   ```
-- [ ] Run `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_does_not_expand_more_than_no_prune_and_cost_matches -- --nocapture` and observe behavior
+- [ ] Run
+      `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_does_not_expand_more_than_no_prune_and_cost_matches -- --nocapture`
+      and observe behavior
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
 - [ ] Run `pre-commit run --all-files` and fix any issues
 
@@ -72,6 +75,7 @@ This document provides a detailed, actionable implementation plan with phases, s
 - [ ] Commit: `feat: add debug assertions for heuristic and pruning invariants`
 
 **Conventional Commit Format**:
+
 ```
 feat: add debug assertions for heuristic and pruning invariants
 
@@ -168,6 +172,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Commit: `feat: add exact solver for tiny instances and admissibility tests`
 
 **Conventional Commit Format**:
+
 ```
 feat: add exact solver for tiny instances and admissibility tests
 
@@ -208,7 +213,8 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Filter instances where solver can run in reasonable time
 - [ ] Add tolerance for floating-point comparison (use 1e-9)
 - [ ] Record statistics: success rate, cost differences, expansion ratios
-- [ ] Run `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prop_prune_preserves_optimality` with many cases
+- [ ] Run `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prop_prune_preserves_optimality` with many
+      cases
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
 - [ ] Run `pre-commit run --all-files` and fix any issues
 
@@ -230,7 +236,8 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Copy the failing test case exactly
 - [ ] Add detailed logging at each pruning decision
 - [ ] Output `best_ub` history, pruned states, and final costs
-- [ ] Run test and save output to file: `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_diagnostic -- --nocapture > prune_diagnostic_output.txt 2>&1`
+- [ ] Run test and save output to file:
+      `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_diagnostic -- --nocapture > prune_diagnostic_output.txt 2>&1`
 - [ ] Analyze output to identify root cause
 - [ ] Document findings in test file or separate markdown file
 
@@ -243,6 +250,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Commit: `feat: add property test for pruning optimality and diagnostic logging`
 
 **Conventional Commit Format**:
+
 ```
 feat: add property test for pruning optimality and diagnostic logging
 
@@ -313,6 +321,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Commit: `docs: analyze and document pruning optimality failure root cause`
 
 **Conventional Commit Format**:
+
 ```
 docs: analyze and document pruning optimality failure root cause
 
@@ -360,6 +369,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Commit with appropriate type: `fix: ...` or `refactor: ...` or `test: ...`
 
 **Conventional Commit Format** (example):
+
 ```
 fix: ensure upper bound heuristic is admissible
 
@@ -399,10 +409,13 @@ Closes #[issue-number] (if applicable)
 - [ ] Or use GitHub web interface
 
 **PR Title** (Conventional Commits format):
+
 ```
 fix: investigate and fix pruning optimality failure
 ```
+
 OR (if no fix yet):
+
 ```
 investigate: add tooling to diagnose pruning optimality failure
 ```
@@ -412,25 +425,30 @@ investigate: add tooling to diagnose pruning optimality failure
 ```markdown
 ## Problem
 
-The test `prune_does_not_expand_more_than_no_prune_and_cost_matches` is failing because pruning finds a different (and potentially suboptimal) solution than no-prune mode.
+The test `prune_does_not_expand_more_than_no_prune_and_cost_matches` is failing because pruning finds a different (and
+potentially suboptimal) solution than no-prune mode.
 
 ## Investigation Approach
 
 This PR implements investigation tooling from [PROOF_TESTING.md](docs/PROOF_TESTING.md) to diagnose the issue:
 
 ### Phase 1: Debug Assertions
+
 - Added runtime invariant checks for heuristic bounds
 - Added monotonicity tracking for `best_ub`
 
 ### Phase 2: Exact Solver
+
 - Implemented exhaustive BFS solver for tiny instances (≤2 nodes, ≤3 slots, ≤2 target)
 - Added property tests to verify upper bound admissibility: `upper_bound >= exact_optimal`
 
 ### Phase 3: Property Tests and Logging
+
 - Generalized failing test to property test running on many random instances
 - Added detailed logging for pruning decisions
 
 ### Phase 4: Analysis
+
 - [Status: Complete/In Progress/Not Started]
 - [If complete: link to analysis doc]
 
@@ -440,8 +458,7 @@ This PR implements investigation tooling from [PROOF_TESTING.md](docs/PROOF_TEST
 
 ## Solution
 
-[If fix implemented: describe the fix]
-[If not yet fixed: describe next steps]
+[If fix implemented: describe the fix] [If not yet fixed: describe next steps]
 
 ## Testing
 
@@ -452,8 +469,7 @@ This PR implements investigation tooling from [PROOF_TESTING.md](docs/PROOF_TEST
 
 ## Related Issues
 
-Fixes #[issue-number] (if applicable)
-Related to #[issue-number] (if applicable)
+Fixes #[issue-number] (if applicable) Related to #[issue-number] (if applicable)
 ```
 
 ### 6.4 Verify PR CI
@@ -492,6 +508,7 @@ Related to #[issue-number] (if applicable)
 ## Quick Reference: Commands
 
 ### Testing
+
 ```bash
 # Run all tests
 cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib
@@ -507,6 +524,7 @@ PROPTEST_CASES=1000 cargo test --manifest-path src/hoi4_build_core/Cargo.toml --
 ```
 
 ### Formatting
+
 ```bash
 # Format Rust code
 cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml
@@ -516,6 +534,7 @@ cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml -- --check
 ```
 
 ### Pre-commit
+
 ```bash
 # Run all hooks
 pre-commit run --all-files
@@ -525,6 +544,7 @@ pre-commit run rustfmt-core --all-files
 ```
 
 ### Git Workflow
+
 ```bash
 # Check status
 git status
@@ -539,6 +559,7 @@ Body explaining what and why."
 ```
 
 ### Conventional Commits Format
+
 ```
 <type>(<scope>): <subject>
 
@@ -547,11 +568,9 @@ Body explaining what and why."
 <footer>
 ```
 
-**Types**: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, etc.
-**Scope**: Optional, e.g., `heuristic`, `solver`, `pruning`
-**Subject**: Short description (<50 chars)
-**Body**: Detailed explanation
-**Footer**: Breaking changes, related issues
+**Types**: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, etc. **Scope**: Optional, e.g., `heuristic`, `solver`,
+`pruning` **Subject**: Short description (<50 chars) **Body**: Detailed explanation **Footer**: Breaking changes,
+related issues
 
 ---
 
@@ -563,4 +582,3 @@ Body explaining what and why."
 - Add tests before implementing fixes
 - Document findings as you go
 - Keep PR descriptions comprehensive but focused
-
