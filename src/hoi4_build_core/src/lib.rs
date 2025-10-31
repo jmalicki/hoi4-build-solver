@@ -76,6 +76,7 @@ fn infra_mult(infra: u8) -> f64 {
     1.0 + (2.0 * (infra as f64)) / 10.0
 }
 
+#[allow(dead_code)]
 fn fmt_count(n: usize) -> String {
     if n >= 1_000_000_000 {
         format!("{:.2}B", (n as f64) / 1_000_000_000.0)
@@ -88,6 +89,7 @@ fn fmt_count(n: usize) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn fmt_step(n: usize) -> String {
     if n.is_multiple_of(1_000_000_000) && n >= 1_000_000_000 {
         format!("{}B", n / 1_000_000_000)

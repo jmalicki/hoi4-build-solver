@@ -5,13 +5,9 @@
 //
 // Structure: QuaternaryHeapOfIndices { heap: Heap { tree: Vec<(N, K)>, positions: HeapPositionsHasIndex { positions: Vec<usize>, ph: PhantomData } } }
 
-use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
+#![allow(clippy::all, unsafe_code, unused, missing_docs, clippy::missing_docs_in_private_items)]
 
-/// Unsafe helper to access internal vector and grow it directly.
-///
-/// This function uses unsafe transmute to access the private `positions` field
-/// of the heap and resize its internal Vec to accommodate more indices.
-///
+use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
 /// # Safety
 ///
 /// This function is unsafe because it:
