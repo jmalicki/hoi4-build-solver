@@ -193,12 +193,28 @@ The web app can include a benchmarking mode to compare search performance across
 
 Converting the solver to a browser-based, no-backend web app is practical. The main work is exposing a WASM-friendly API and building a small UI. We retain the Python CLI for local workflows and add a WebAssembly target for interactive, shareable demos and distribution.
 
+## Next Steps
+
+1) Refactor core boundary
+   - Extract `core::types` and `core::solve` callable from both PyO3 and WASM
+   - Move progress/metrics collection to core result type
+2) Feature-gate front-ends
+   - `pyo3` (default) and `wasm` (optional) features with separate wrappers
+3) Add heuristic registry in core
+   - String → trait mapping used by both front-ends
+4) Define JS-facing API with serde types
+   - `solve_and_reconstruct_js` and `solve_with_metrics_js`
+5) Build minimal web demo (Vite + Worker)
+   - CSV upload, target controls, heuristic selection, run/cancel, results export
+6) Add benchmarking mode UI
+   - Multi-heuristic matrix, pruning on/off, results table + CSV export
+
+After these refactors, revisit performance and UX: test large inputs in-browser, tune memory, and consider optional threaded WASM if needed.
+
 ## Moving Shareable Logic into Rust Core
 
-While Python and Web are separate front-ends, we should centralize shared logic in Rust so both consume the same behavior:
+While Python and Web are separate front-ends, we should centralize only computational core logic in Rust so both consume the same behavior:
 
-- Input validation and feasibility checks (ranges, capacity)
-- Target-type parsing and error messages
 - Heuristic selection mapping from string → trait object
 - Progress/metrics collection (expanded, pruned, heap stats)
 - Path/moves reconstruction and final-state formatting
@@ -207,6 +223,11 @@ While Python and Web are separate front-ends, we should centralize shared logic 
 Optional to migrate (keep thin wrappers in front-ends):
 - CSV/Sheets parsing (browser/Python have native libs; keep parsing front-end specific)
 - Dock/Refinery preprocessing: front-ends can normalize columns, but a small Rust helper can also accept `{ name, numSlots, numInfra, numCivilian, numMilitary }` and compute effective slots given optional fields
+
+Front-end responsibilities (Node CLI and Web UI):
+- Input validation and feasibility checks (ranges, capacity) close to UX
+- Target-type parsing, friendly errors, and localization
+- File/network I/O (CSV upload, Sheets fetch)
 
 Refactor outline:
 - `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`, `SolveMetrics`
