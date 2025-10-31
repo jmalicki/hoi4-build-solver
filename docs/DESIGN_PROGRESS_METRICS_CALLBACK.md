@@ -40,7 +40,8 @@ pub struct ProgressOptions {
     pub cadence: usize, // 0 disables
 }
 
-pub type ProgressCallback = dyn Fn(&ProgressSnapshot) -> bool + Send + Sync + 'static; // return true to request early stop
+pub type ProgressCallback = dyn Fn(&ProgressSnapshot) -> bool + Send + Sync + 'static;
+// return true to request early stop
 
 pub struct SolveOptions {
     pub prune: bool,
@@ -64,11 +65,14 @@ pub struct SolveOptions {
 - Accept a Python callable for progress, e.g.:
 
 ```python
-def solve_and_reconstruct(..., *, prune: bool, heuristic: str, progress=None, print_every: int = 10_000):
+def solve_and_reconstruct(
+    ..., *, prune: bool, heuristic: str, progress=None, print_every: int = 10_000
+):
     # if progress is not None: wrap into SolveOptions.progress; return True from callback to stop
 ```
 
-- If `progress` is provided, disable internal printing; user decides verbosity.
+- If `progress` is provided, disable internal printing; user decides
+  verbosity.
 - Backward compatible: if `progress is None`, keep existing banner/final line
   printing for now (deprecated path), or disable printing entirely and only use
   the callback path.

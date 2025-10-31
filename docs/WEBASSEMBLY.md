@@ -52,7 +52,12 @@ remains the default; the WebAssembly build is an optional feature.
 
   ```rust
   // Shared, pure API (called by both py and wasm)
-  pub fn solve_and_reconstruct_core(input: CoreInput, opts: CoreOpts) -> CoreOutput { /* ... */ }
+  pub fn solve_and_reconstruct_core(
+      input: CoreInput,
+      opts: CoreOpts,
+  ) -> CoreOutput {
+      /* ... */
+  }
 
   // PyO3 wrapper (default)
   #[cfg(feature = "pyo3")]
@@ -68,7 +73,13 @@ remains the default; the WebAssembly build is an optional feature.
 - WASM (web): disable default features, enable `wasm`
 
   ```bash
-  wasm-pack build --release --target web --out-dir pkg -- --no-default-features --features wasm
+  wasm-pack build \
+    --release \
+    --target web \
+    --out-dir pkg \
+    -- \
+    --no-default-features \
+    --features wasm
   ```
 
 This approach ensures the CLI remains the default experience while enabling an
