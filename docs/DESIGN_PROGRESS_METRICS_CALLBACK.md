@@ -35,7 +35,7 @@ pub struct ProgressOptions {
     pub cadence: usize, // 0 disables
 }
 
-pub type ProgressCallback = dyn Fn(&ProgressSnapshot) + Send + Sync + 'static;
+pub type ProgressCallback = dyn Fn(&ProgressSnapshot) -> bool + Send + Sync + 'static; // return true to request early stop
 
 pub struct SolveOptions {
     pub prune: bool,
@@ -57,7 +57,7 @@ pub struct SolveOptions {
 
 ```python
 def solve_and_reconstruct(..., *, prune: bool, heuristic: str, progress=None, print_every: int = 10_000):
-    # if progress is not None: wrap into SolveOptions.progress
+    # if progress is not None: wrap into SolveOptions.progress; return True from callback to stop
 ```
 
 - If `progress` is provided, disable internal printing; user decides verbosity.
@@ -66,7 +66,7 @@ def solve_and_reconstruct(..., *, prune: bool, heuristic: str, progress=None, pr
 ## WebAssembly Front-end
 
 - Expose `ProgressSnapshot` via `wasm-bindgen` as a JS-friendly object (serde-based or explicit getters).
-- Accept a JS function (or closure) as the callback; for the Web UI, proxy to a Web Worker `postMessage` for UI updates.
+- Accept a JS function (or closure) as the callback returning boolean; for the Web UI, proxy to a Web Worker `postMessage` for UI updates. Return `true` to request early stop.
 
 ## Metrics (End-of-run)
 
