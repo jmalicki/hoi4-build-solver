@@ -35,11 +35,13 @@ struct ConstructionItem {
 ```
 
 **Both factory allocation and infra multiplier are implicit**: When processing the queue:
+
 - **Factory allocation**: Computed in FIFO order (first item gets min(15, remaining_factories), etc.)
 - **Infra multiplier**: Computed from current node infra level at the moment of calculation
 - **Effective completion time**: `effective_time = cost_remaining / (current_infra_mult * factories_allocated)`
 
 This makes both factors implicit:
+
 - Factory allocation changes as queue changes (FIFO order)
 - Infra multiplier changes when infra completes (use current level, no adjustment needed)
 - When advancing time by `delta_t`: `cost_remaining -= delta_t * current_infra_mult * factories_allocated`
@@ -50,6 +52,7 @@ This makes both factors implicit:
 ### Per-Node Construction Tracking
 
 Extend `NodeState` with:
+
 ```rust
 struct NodeState {
     infra: u8,
@@ -60,6 +63,7 @@ struct NodeState {
 ```
 
 Alternatively, keep a separate map (lighter weight if most nodes have 0):
+
 ```rust
 under_construction: HashMap<usize, u8>,  // node_index -> count
 // Absence implies 0
@@ -70,11 +74,13 @@ under_construction: HashMap<usize, u8>,  // node_index -> count
 ### Phase 1: Add New Construction Item (Optional)
 
 When generating successors from a state:
+
 - Optionally add one new item to the construction queue (subject to slot capacity)
 - This represents the decision to start a new construction project
 - Each successor adds a different construction item, or none at all
 
 **Constraints**:
+
 - Cannot exceed slot capacity (civ + mil + under_construction < slots)
 - For conversions: requires existing civilian factory (civ > 0)
 

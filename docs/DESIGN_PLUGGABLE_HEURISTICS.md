@@ -7,6 +7,7 @@ This document describes the refactoring to support pluggable heuristics in the H
 ## Current State
 
 Currently, the heuristic logic is embedded directly in `lib.rs`:
+
 - `heuristic()` function: computes an admissible lower bound on remaining cost
 - `upper_bound_convert_then_mil()` function: computes an upper bound for pruning
 
@@ -62,6 +63,7 @@ pub trait Heuristic: Send + Sync {
 ### Current Implementation: `StandardHeuristic`
 
 The current heuristic logic becomes `StandardHeuristic`, implementing the trait:
+
 - `lower_bound()`: current `heuristic()` function logic
 - `upper_bound()`: current `upper_bound_convert_then_mil()` function logic
 - `name()`: returns `"standard"`
@@ -83,6 +85,7 @@ fn solve_and_reconstruct_internal(
 ```
 
 The public Python function `solve_and_reconstruct()` will:
+
 1. Parse heuristic name (default: `"standard"`)
 2. Create heuristic via `heuristic::create_by_name()`
 3. Call internal function with the heuristic

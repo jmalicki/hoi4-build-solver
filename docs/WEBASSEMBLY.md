@@ -23,6 +23,7 @@ We organize the codebase at the project root with clear separation between Rust 
 We keep one codebase with two front-ends over the same core logic. The CLI remains the default; the WebAssembly build is an optional feature.
 
 - Cargo features (illustrative):
+
   ```toml
   [features]
   default = ["pyo3"]
@@ -36,6 +37,7 @@ We keep one codebase with two front-ends over the same core logic. The CLI remai
   ```
 
 - Conditional compilation:
+
   ```rust
   // Shared, pure API (called by both py and wasm)
   pub fn solve_and_reconstruct_core(input: CoreInput, opts: CoreOpts) -> CoreOutput { /* ... */ }
@@ -51,7 +53,8 @@ We keep one codebase with two front-ends over the same core logic. The CLI remai
 
 - Build commands:
   - Default (CLI/Python): uses `default-features` with PyO3
-  - WASM (web): disable default features, enable `wasm`
+- WASM (web): disable default features, enable `wasm`
+
     ```bash
     wasm-pack build --release --target web --out-dir pkg -- --no-default-features --features wasm
     ```
@@ -65,6 +68,7 @@ This approach ensures the CLI remains the default experience while enabling an o
 - Heuristics: Now pluggable via a trait and factory; selection by string name maps naturally to web UI controls.
 
 ## Required Changes
+
 
 1) Separate Web API from PyO3
 - Add a `wasm` feature flag and a sibling interface that exposes:

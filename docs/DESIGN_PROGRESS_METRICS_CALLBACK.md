@@ -45,6 +45,7 @@ pub struct SolveOptions {
 ```
 
 2) Core entry points accept `SolveOptions` and invoke the callback when:
+
 - `iterations == 1` or `iterations % cadence == 0`
 - Final summary (last snapshot) before returning
 
