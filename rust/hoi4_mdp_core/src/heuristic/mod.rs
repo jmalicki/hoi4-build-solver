@@ -49,13 +49,30 @@ pub trait Heuristic: Send + Sync {
 ///
 /// Returns an error if the name is unknown.
 pub fn create_by_name(name: &str) -> Result<Box<dyn Heuristic>, String> {
-    match name {
-        "best_infra_upper_bound" | "standard" => Ok(Box::new(BestInfraUpperBoundHeuristic)),
-        // zero heuristic for Dijkstra's algorithm; accept both spellings
-        "djikstra" | "dijkstra" | "zero" => Ok(Box::new(ZeroHeuristic)),
+    match canonical_name(name) {
+        Some("best_infra_upper_bound") => Ok(Box::new(BestInfraUpperBoundHeuristic)),
+        Some("djikstra") => Ok(Box::new(ZeroHeuristic)),
         _ => Err(format!(
-            "Unknown heuristic: {}. Available: best_infra_upper_bound (alias: standard), djikstra (alias: dijkstra, zero)",
-            name
+            "Unknown heuristic: {}. Available: {}",
+            name,
+            list_names().join(", ")
         )),
+    }
+}
+
+/// Return canonical heuristic names supported.
+pub fn list_names() -> Vec<&'static str> {
+    vec![
+        "best_infra_upper_bound",
+        "djikstra",
+    ]
+}
+
+/// Map input name (including aliases) to canonical name.
+pub fn canonical_name(input: &str) -> Option<&'static str> {
+    match input.to_lowercase().as_str() {
+        "best_infra_upper_bound" | "standard" => Some("best_infra_upper_bound"),
+        "djikstra" | "dijkstra" | "zero" => Some("djikstra"),
+        _ => None,
     }
 }
