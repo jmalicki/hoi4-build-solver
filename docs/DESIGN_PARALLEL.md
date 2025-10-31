@@ -30,7 +30,7 @@ struct ConstructionItem {
     action_type: Action,    // "civilian", "military", "infra", "convert"
     cost_remaining: f64,    // Base cost remaining (raw cost, before infra/factory allocation)
                            // Examples: 7200 for military, 10800 for civilian, 4000 for convert, 6000 for infra
-                           // Formula: effective_time = cost_remaining / (infra_multiplier * factories_allocated)
+// Formula: effective_time = cost_remaining / (infra_multiplier * factories_allocated)
 }
 ```
 
@@ -38,13 +38,13 @@ struct ConstructionItem {
 
 - **Factory allocation**: Computed in FIFO order (first item gets min(15, remaining_factories), etc.)
 - **Infra multiplier**: Computed from current node infra level at the moment of calculation
-- **Effective completion time**: `effective_time = cost_remaining / (current_infra_mult * factories_allocated)`
+- **Effective completion time**: $\text{effective\_time} = \dfrac{\text{cost\_remaining}}{\text{current\_infra\_mult} \times \text{factories\_allocated}}$
 
 This makes both factors implicit:
 
 - Factory allocation changes as queue changes (FIFO order)
 - Infra multiplier changes when infra completes (use current level, no adjustment needed)
-- When advancing time by `delta_t`: `cost_remaining -= delta_t * current_infra_mult * factories_allocated`
+- When advancing time by $\delta_t$: $\text{cost\_remaining} \mathrel{-=} \delta_t \times \text{current\_infra\_mult} \times \text{factories\_allocated}$
 - Items with `cost_remaining <= 0` are completed
 
 **Benefits**: No need to adjust `cost_remaining` when infra changes - we just use the new infra_multiplier in future calculations.
@@ -97,11 +97,15 @@ After adding a construction item, check factory allocation:
 3. **If factories are fully utilized** (all queue items have 15 factories, or queue empty):
    - Allocate factories in FIFO order: first item gets min(15, total_civ), second gets min(15, total_civ - first_allocation), etc.
    - For each item, compute effective completion time using **current** infra level at that node:
-     - `effective_time = cost_remaining / (current_infra_multiplier * factories_allocated)`
+  - $\text{effective\_time} = \dfrac{\text{cost\_remaining}}{\text{current\_infra\_mult} \times \text{factories\_allocated}}$
    - Find the item with minimum `effective_time` (next to complete)
-   - Let `delta_t` = that minimum effective time (ensures no cost_remaining goes negative)
-   - For each item, reduce its `cost_remaining` by `delta_t * current_infra_mult * factories_allocated` (time advances for all)
-   - **Invariant**: `cost_remaining >= 0` (at least one item will have `cost_remaining = 0`, others remain positive)
+- Let $\delta_t$ be that minimum effective time (ensures no
+  $\text{cost\_remaining}$ goes negative)
+- For each item, reduce its $\text{cost\_remaining}$ by
+  $\delta_t \times \text{current\_infra\_mult} \times \text{factories\_allocated}$
+  (time advances for all)
+- **Invariant**: $\text{cost\_remaining} \ge 0$ (at least one item will
+  have $\text{cost\_remaining} = 0$, others remain positive)
    - Complete items where `cost_remaining == 0` (exactly the minimum item), updating node state
    - **Note**: When infra completes, future calculations for items on that node automatically use the new infra_multiplier - no adjustment needed
    - Remove completed items from queue
@@ -128,25 +132,28 @@ Each `Successor` contains:
 
 The existing "cost" formula is actually time:
 
-- `base_cost / (infra_multiplier * total_civilian)`
+- $\dfrac{\text{base\_cost}}{\text{infra\_multiplier} \times \text{total\_civilian}}$
 - This represents time to complete given factory allocation
 
 For the construction queue:
 
-- `cost_remaining` = raw base cost (7200 for military, 10800 for civilian, etc.)
-- Both infra_multiplier and factories_allocated are computed from current state when needed
-- Effective completion time: `effective_time = cost_remaining / (infra_mult * factories_allocated)`
+- $\text{cost\_remaining}$ = raw base cost (7200 for military, 10800 for
+  civilian, etc.)
+- Both $\text{infra\_multiplier}$ and $\text{factories\_allocated}$ are
+  computed from current state when needed
+- Effective completion time:
+  $\text{effective\_time} = \dfrac{\text{cost\_remaining}}{\text{infra\_mult} \times \text{factories\_allocated}}$
 - When advancing time:
-  - `delta_t = min(cost_remaining / (infra_mult * factories_allocated))` across all queue items
-  - For each item: `cost_remaining = cost_remaining - (delta_t * current_infra_mult * factories_allocated)`
-  - **Invariant**: `cost_remaining >= 0` always (delta_t is chosen to ensure this)
-  - Items with `cost_remaining == 0` are completed (exactly those that determined delta_t)
-- **Infra changes are implicit**: When infra completes, future calculations for items on that node automatically use the new infra_multiplier
+  - $\delta_t = \min\left(\dfrac{\text{cost\_remaining}}{\text{infra\_mult} \times \text{factories\_allocated}}\right)$ across all queue items
+  - For each item: $\text{cost\_remaining} = \text{cost\_remaining} - \left(\delta_t \times \text{current\_infra\_mult} \times \text{factories\_allocated}\right)$
+  - **Invariant**: $\text{cost\_remaining} \ge 0$ always ($\delta_t$ is chosen to ensure this)
+  - Items with $\text{cost\_remaining} = 0$ are completed (exactly those that determined $\delta_t$)
+- **Infra changes are implicit**: When infra completes, future calculations for items on that node automatically use the new infra\_multiplier
 
 **Example**: Two military factories in queue, both with cost_remaining=7200, infra_mult=1.0 (infra level 0):
 
-- Item 1: allocated 15 factories → `effective_time = 7200 / (1.0 * 15) = 480` days
-- Item 2: allocated 10 factories → `effective_time = 7200 / (1.0 * 10) = 720` days
+- Item 1: allocated 15 factories → $\text{effective\_time} = \dfrac{7200}{1.0 \times 15} = 480$ days
+- Item 2: allocated 10 factories → $\text{effective\_time} = \dfrac{7200}{1.0 \times 10} = 720$ days
 - `delta_t = min(480, 720) = 480` days
 - After 480 days:
   - Item 1: `cost_remaining = 7200 - (480 * 1.0 * 15) = 0` → **completed**

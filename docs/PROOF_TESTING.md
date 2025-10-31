@@ -3,10 +3,10 @@
 ## Scope
 
 - Validate core invariants used by pruning and heuristics:
-  - Admissibility: `0 ≤ h(s) ≤ h*(s)`.
-  - Consistency: `h(s) ≤ c(s,s') + h(s')`.
-  - Safe pruning: `g+ub > best_ub ⇒ skip enqueue`.
-  - Upper bound monotonicity: `best_ub` never increases.
+  - Admissibility: $0 \le h(s) \le h^*(s)$.
+  - Consistency: $h(s) \le c(s,s') + h(s')$.
+  - Safe pruning: $g + ub > \text{best\_ub} \implies$ skip enqueue.
+  - Upper bound monotonicity: $\text{best\_ub}$ never increases.
 
 ## Layers
 
