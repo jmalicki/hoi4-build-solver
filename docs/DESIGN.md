@@ -75,24 +75,42 @@ The program will take the initial list of nodes and their values, and produce:
   node’s variables by ±1 and leaves other nodes unchanged. In A*, we
   generate successors on demand; goal detection ends the search.
 
-- **Action cost**: Let `i` be the chosen node and `k = numInfra[i]`
-  before the action. Define `infraMultiplier = 1 + (2 * k) / 10` and let
-  `sumCivilian = Σ_j numCivilian[j]` over all nodes in the current state.
-  The immediate cost of an action is the base cost divided by both
-  multipliers:
-  - civilian: `civilianCost / infraMultiplier / sumCivilian`
-  - military: `militaryCost / infraMultiplier / sumCivilian`
-  - infra: `infraCost / infraMultiplier / sumCivilian`
-  - convert: `conversionCost / infraMultiplier / sumCivilian`
-  - Note: To avoid division-by-zero, we define `sumCivilian >= 1` (i.e., use `max(1, sumCivilian)`).
+- **Action cost**: Let $i$ be the chosen node and $k = \text{numInfra}[i]$
+  before the action. Define:
+  $$
+  \text{infraMultiplier} = 1 + \frac{2k}{10}
+  $$
+  and let $\text{sumCivilian} = \sum_j \text{numCivilian}[j]$ over all
+  nodes in the current state. The immediate cost of an action is the base
+  cost divided by both multipliers:
+  - civilian: $\text{civilianCost} / \text{infraMultiplier} /
+    \text{sumCivilian}$
+  - military: $\text{militaryCost} / \text{infraMultiplier} /
+    \text{sumCivilian}$
+  - infra: $\text{infraCost} / \text{infraMultiplier} /
+    \text{sumCivilian}$
+  - convert: $\text{conversionCost} / \text{infraMultiplier} /
+    \text{sumCivilian}$
+  - Note: To avoid division-by-zero, we define $\text{sumCivilian} \geq
+    1$ (i.e., use $\max(1, \text{sumCivilian})$).
 
-- **Objective**: Reach any state with `sum(numMilitary)=targetMilitary` at minimal cumulative cost. We solve a deterministic shortest-path over the implicit state graph using A*.
+- **Objective**: Reach any state with $\sum \text{numMilitary} =
+  \text{targetMilitary}$ at minimal cumulative cost. We solve a
+  deterministic shortest-path over the implicit state graph using A*.
 
 ### A* heuristic
 
-- **Choice**: Use A*. Dijkstra is A* with `h(s)=0`. With an admissible, consistent heuristic, A* explores no more nodes than Dijkstra and often far fewer.
-- **Heuristic (admissible and consistent)**: Let `remainingMil` be max(0, `targetMilitary - sum(numMilitary)`). Define a per-unit optimistic cost using the best multiplier (assume infra at 5) and the cheapest path to 1 military on a slot (direct military vs convert). Then
-  - `h(s) = remainingMil * bestUnitCostWithMaxMultiplier`.
+- **Choice**: Use A*. Dijkstra is A* with $h(s) = 0$. With an admissible,
+  consistent heuristic, A* explores no more nodes than Dijkstra and often
+  far fewer.
+- **Heuristic (admissible and consistent)**: Let $\text{remainingMil} =
+  \max(0, \text{targetMilitary} - \sum \text{numMilitary})$. Define a
+  per-unit optimistic cost using the best multiplier (assume infra at 5)
+  and the cheapest path to 1 military on a slot (direct military vs
+  convert). Then:
+  $$
+  h(s) = \text{remainingMil} \times \text{bestUnitCostWithMaxMultiplier}
+  $$
   - Consistency sketch: actions either reduce `remainingMil` by 1 (h drops by ≤ that lower bound, while action cost ≥ that bound) or leave it unchanged (h constant, action cost > 0), so `h(s) ≤ c(s,a) + h(s')` and `h(goal)=0`.
 - **Refinements**: Optionally add a lower bound on infra costs needed to reach the assumed multiplier; maintain consistency by subtracting at most per-step lower bounds.
 

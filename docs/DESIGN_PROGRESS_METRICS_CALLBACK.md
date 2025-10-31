@@ -119,15 +119,24 @@ pub struct SolveMetrics {
 
 ### Early Stop Semantics
 
-When the callback returns `true`, the solver halts and returns the best-so-far path based on minimal `f = g + h` encountered (not strictly the minimal `g`). This provides a reasonable anytime result with the lowest estimated total cost seen so far.
+When the callback returns `true`, the solver halts and returns the
+best-so-far path based on minimal $f = g + h$ encountered (not strictly
+the minimal $g$). This provides a reasonable anytime result with the
+lowest estimated total cost seen so far.
 
-Why not return minimal `g` (cost-so-far)?
+Why not return minimal $g$ (cost-so-far)?
 
-- Different depths: A node with very low `g` may simply be shallow (few steps taken) while a competing node with higher `g` is much closer to the goal. Comparing raw `g` across unequal depths is misleading.
-- Remaining work ignored: `g` ignores the cost to complete the plan. Two frontiers with similar `g` can have very different remaining cost. `f = g + h` incorporates a principled lower bound on the remainder.
+- Different depths: A node with very low $g$ may simply be shallow (few
+  steps taken) while a competing node with higher $g$ is much closer to
+  the goal. Comparing raw $g$ across unequal depths is misleading.
+- Remaining work ignored: $g$ ignores the cost to complete the plan. Two
+  frontiers with similar $g$ can have very different remaining cost. $f =
+  g + h$ incorporates a principled lower bound on the remainder.
 - Our dynamics amplify this: denominators and multipliers change as the plan progresses (civilians, infra), so early cheap actions can make `g` look artificially small relative to deeper, more promising states.
 
-Conclusion: `f` is the correct anytime signal; it balances progress so far with a consistent lower bound on what remains, avoiding the bias that makes `g` incomparable mid-search.
+Conclusion: $f$ is the correct anytime signal; it balances progress so
+far with a consistent lower bound on what remains, avoiding the bias that
+makes $g$ incomparable mid-search.
 
 ## Rationale
 
