@@ -1,8 +1,7 @@
 # Pre-commit and CI Setup Plan
 
-This document outlines the plan for setting up pre-commit hooks, GitHub Actions
-CI, README badges, and MIT license for this repository. It is based on analysis
-of existing repositories under `github.com/jmalicki/`.
+This document outlines the plan for setting up pre-commit hooks, GitHub Actions CI, README badges, and MIT license for
+this repository. It is based on analysis of existing repositories under `github.com/jmalicki/`.
 
 ## Project Context
 
@@ -10,15 +9,13 @@ This repository is a **Python + Rust (PyO3)** hybrid project:
 
 - **Python**: Primary interface using `uv` for dependency management
 - **Rust**: Core library (`hoi4_mdp_core`) compiled as a PyO3 extension module
-- **Structure**: Python CLI wrapper around Rust core for MDP solver
-  functionality
+- **Structure**: Python CLI wrapper around Rust core for MDP solver functionality
 
 ## 1. Pre-commit Hooks Configuration
 
 ### Recommended `.pre-commit-config.yaml`
 
-Based on patterns observed in `arsync`, `econ-graph`, and `apocalypse-now-essay`
-repositories:
+Based on patterns observed in `arsync`, `econ-graph`, and `apocalypse-now-essay` repositories:
 
 ```yaml
 # Pre-commit configuration for Python + Rust hybrid project
@@ -194,8 +191,7 @@ Keep the config as strict as feasible. Remove any disable above if the
 docs can comply without compromising clarity.
 ```
 
-1. **`.secrets.baseline`** (for detect-secrets - generate with
-   `detect-secrets scan --baseline .secrets.baseline`)
+1. **`.secrets.baseline`** (for detect-secrets - generate with `detect-secrets scan --baseline .secrets.baseline`)
 
 ### Installation Instructions
 
@@ -218,8 +214,7 @@ pre-commit run --all-files
 
 ### Recommended Workflow Structure
 
-Based on patterns from `arsync`, `github-pr-automation-mcp`, and `diesel`
-repositories:
+Based on patterns from `arsync`, `github-pr-automation-mcp`, and `diesel` repositories:
 
 #### 2.1 Main CI Workflow (`.github/workflows/ci.yml`)
 
@@ -284,8 +279,7 @@ jobs:
         run: uv run black --check --line-length 100 src/py
 
       - name: Check Python linting (flake8)
-        run:
-          uv run flake8 --max-line-length=100 --extend-ignore=E203,W503 src/py
+        run: uv run flake8 --max-line-length=100 --extend-ignore=E203,W503 src/py
         continue-on-error: true # Optional - can make required later
 
       - name: Check Rust formatting
@@ -386,9 +380,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key:
-            cargo-${{ matrix.os }}-${{ matrix.rust }}-${{
-            hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build Rust extension
         run: uv run maturin develop --release
@@ -660,8 +652,7 @@ Configure in GitHub repository settings:
 1. **Create MIT LICENSE file** (immediate)
 2. **Add `.pre-commit-config.yaml`** (with minimal hooks first, expand later)
 3. **Create `.commitlintrc.yml`** for Conventional Commits
-4. **Set up GitHub Actions workflows** (start with `ci.yml`, add others
-   incrementally)
+4. **Set up GitHub Actions workflows** (start with `ci.yml`, add others incrementally)
 5. **Update README.md with badges** (after workflows are running)
 6. **Enable pre-commit.ci** (optional but recommended)
 7. **Run `pre-commit run --all-files`** to fix existing issues
@@ -696,8 +687,7 @@ Configure in GitHub repository settings:
 ### Common Workflow Structure
 
 - **Early Fast Feedback**: Code quality checks (fmt, lint) run first
-- **Parallel Execution**: Tests, security, dependencies run in parallel after
-  quality checks
+- **Parallel Execution**: Tests, security, dependencies run in parallel after quality checks
 - **Documentation**: Built last, depends on successful tests
 - **Concurrency**: Use `cancel-in-progress: true` to avoid wasted CI minutes
 
@@ -711,8 +701,7 @@ Configure in GitHub repository settings:
 
 ---
 
-**Note**: This document is a planning document and will not be committed to the
-repository as per user requirements. It serves as a reference for implementing
-the CI/CD setup.
+**Note**: This document is a planning document and will not be committed to the repository as per user requirements. It
+serves as a reference for implementing the CI/CD setup.
 ````
 `````

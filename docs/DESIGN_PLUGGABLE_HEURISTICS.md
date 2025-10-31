@@ -2,9 +2,8 @@
 
 ## Overview
 
-This document describes the refactoring to support pluggable heuristics in the
-HOI4 MDP solver. The goal is to enable experimentation with different heuristic
-strategies while maintaining a clean, extensible architecture.
+This document describes the refactoring to support pluggable heuristics in the HOI4 MDP solver. The goal is to enable
+experimentation with different heuristic strategies while maintaining a clean, extensible architecture.
 
 ## Current State
 
@@ -13,8 +12,7 @@ Currently, the heuristic logic is embedded directly in `lib.rs`:
 - `heuristic()` function: computes an admissible lower bound on remaining cost
 - `upper_bound_convert_then_mil()` function: computes an upper bound for pruning
 
-These functions have implementation-specific names that don't reflect their role
-as pluggable components.
+These functions have implementation-specific names that don't reflect their role as pluggable components.
 
 ## Target Architecture
 
@@ -104,11 +102,10 @@ fn create_heuristic(name: &str) -> PyResult<Box<dyn PyHeuristic>> {
 }
 ```
 
-`PyHeuristic` is a Python-wrapped version that implements `Heuristic` and can be
-passed to the solver.
+`PyHeuristic` is a Python-wrapped version that implements `Heuristic` and can be passed to the solver.
 
-Alternatively, simpler design: heuristic name is just a string parameter to
-`solve_and_reconstruct()`, and the factory is internal.
+Alternatively, simpler design: heuristic name is just a string parameter to `solve_and_reconstruct()`, and the factory
+is internal.
 
 ### Heuristic Factory
 
@@ -135,13 +132,11 @@ pub fn create_by_name(name: &str) -> Result<Box<dyn Heuristic>, String> {
 
 3. **Update `lib.rs`**
    - Change `solve_and_reconstruct()` to accept heuristic parameter
-   - Replace direct calls to `heuristic()` and `upper_bound_convert_then_mil()`
-     with trait method calls
+   - Replace direct calls to `heuristic()` and `upper_bound_convert_then_mil()` with trait method calls
    - Add factory function call for Python interface
 
 4. **Python API**
-   - Add `heuristic` parameter to `solve_and_reconstruct()` (kw-only, default
-     `"standard"`)
+   - Add `heuristic` parameter to `solve_and_reconstruct()` (kw-only, default `"standard"`)
    - Use factory to create heuristic internally
 
 5. **Testing**
@@ -165,5 +160,4 @@ Potential future implementations:
 - `RelaxedHeuristic`: Uses relaxed problem constraints
 - `LearningHeuristic`: Uses learned cost estimates from previous runs
 
-Each would implement the `Heuristic` trait and be selectable via the factory
-function.
+Each would implement the `Heuristic` trait and be selectable via the factory function.
