@@ -21,10 +21,14 @@ Across all nodes, we must always satisfy the constraint:
 
 At each time step, we choose exactly one node and do one of four actions:
 
-- **civilian**: add 1 civilian on that node, cost = civilianCost / (1 + (2 · numInfra) / 10)
-- **military**: add 1 military on that node, cost = militaryCost / (1 + (2 · numInfra) / 10)
-- **infra**: add 1 infrastructure on that node, cost = infraCost / (1 + (2 · numInfra) / 10)
-- **convert**: convert 1 civilian → 1 military on that node (keeping civilian ≥ 0), cost = conversionCost / (1 + (2 · numInfra) / 10)
+- **civilian**: add 1 civilian on that node, cost =
+  civilianCost / (1 + (2 · numInfra) / 10)
+- **military**: add 1 military on that node, cost =
+  militaryCost / (1 + (2 · numInfra) / 10)
+- **infra**: add 1 infrastructure on that node, cost =
+  infraCost / (1 + (2 · numInfra) / 10)
+- **convert**: convert 1 civilian → 1 military on that node (keeping
+  civilian ≥ 0), cost = conversionCost / (1 + (2 · numInfra) / 10)
 
 Fixed costs:
 
@@ -37,13 +41,18 @@ The goal is to reach a state where the sum of military factories over all
 nodes equals a given **targetMilitary**, while minimizing **totalCost**.
 The program will take the initial list of nodes and their values, and produce:
 
-- A sequence of moves like `(nodeName, "military")`, `(nodeName, "civilian")`, `(nodeName, "infra")`, `(nodeName, "convert")`
+- A sequence of moves like `(nodeName, "military")`, `(nodeName,
+  "civilian")`, `(nodeName, "infra")`, `(nodeName, "convert")`
 - The final state in the same structure as the input
 
 ### Libraries and approach
 
-- We use an on-demand graph search with A* over the implicit state space to avoid enumerating all states.
-- Performance core will be implemented in **Rust** and exposed to Python via **PyO3**. Python remains the CLI/IO and orchestration layer; Rust handles state encoding, successor generation, heuristic, and the A* loop.
+- We use an on-demand graph search with A* over the implicit state space
+  to avoid enumerating all states.
+- Performance core will be implemented in **Rust** and exposed to Python
+  via **PyO3**. Python remains the CLI/IO and orchestration layer; Rust
+  handles state encoding, successor generation, heuristic, and the A*
+  loop.
 
 ### Modeling details
 

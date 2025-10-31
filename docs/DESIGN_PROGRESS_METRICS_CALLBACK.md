@@ -6,7 +6,8 @@ The core remains free of UI/IO concerns.
 
 ## Summary
 
-- Introduce a lightweight, read-only `ProgressSnapshot` struct in Rust capturing the same variables we currently print.
+- Introduce a lightweight, read-only `ProgressSnapshot` struct in Rust
+  capturing the same variables we currently print.
 - Core solver accepts an optional progress callback.
   When provided, it is invoked at a configurable cadence
   (replacing `verbose`/`print_every`).
@@ -54,7 +55,8 @@ pub struct SolveOptions {
 - `iterations == 1` or `iterations % cadence == 0`
 - Final summary (last snapshot) before returning
 
-3) The callback is not called from within tight inner loops repeatedly; only at cadence boundaries to minimize overhead.
+3) The callback is not called from within tight inner loops repeatedly;
+   only at cadence boundaries to minimize overhead.
 
 ## Python Front-end (PyO3)
 
@@ -71,12 +73,16 @@ def solve_and_reconstruct(..., *, prune: bool, heuristic: str, progress=None, pr
 
 ## WebAssembly Front-end
 
-- Expose `ProgressSnapshot` via `wasm-bindgen` as a JS-friendly object (serde-based or explicit getters).
-- Accept a JS function (or closure) as the callback returning boolean; for the Web UI, proxy to a Web Worker `postMessage` for UI updates. Return `true` to request early stop.
+- Expose `ProgressSnapshot` via `wasm-bindgen` as a JS-friendly object
+  (serde-based or explicit getters).
+- Accept a JS function (or closure) as the callback returning boolean; for
+  the Web UI, proxy to a Web Worker `postMessage` for UI updates. Return
+  `true` to request early stop.
 
 ## Metrics (End-of-run)
 
-- In addition to progress, return a final metrics object alongside the solution:
+- In addition to progress, return a final metrics object alongside the
+  solution:
 
 ```rust
 pub struct SolveMetrics {
@@ -90,18 +96,24 @@ pub struct SolveMetrics {
 }
 ```
 
-- This can be returned in both Python and WASM APIs (e.g., `solve_with_metrics_*`).
+- This can be returned in both Python and WASM APIs (e.g.,
+  `solve_with_metrics_*`).
 
 ## Threading & Safety
 
-- The callback must be `Send + Sync` and lightweight. Avoid heavy work in the callback; UI should batch/queue updates.
-- For WASM, callbacks run on the Worker thread; message to main thread via `postMessage`.
+- The callback must be `Send + Sync` and lightweight. Avoid heavy work in
+  the callback; UI should batch/queue updates.
+- For WASM, callbacks run on the Worker thread; message to main thread via
+  `postMessage`.
 
 ## Migration Plan
 
-1) Define `ProgressSnapshot`, `ProgressOptions`, `SolveOptions`, and add callback support in the core.
-2) Replace direct println! calls with snapshot creation and callback invocation.
-3) Update Python API to accept `progress` and `print_every`; stop printing internally when a callback is present.
+1) Define `ProgressSnapshot`, `ProgressOptions`, `SolveOptions`, and add
+   callback support in the core.
+2) Replace direct println! calls with snapshot creation and callback
+   invocation.
+3) Update Python API to accept `progress` and `print_every`; stop printing
+   internally when a callback is present.
 4) Update Web doc to use the callback for progress bars/logs.
 5) Add optional `solve_with_metrics_*` variants to return final metrics.
 
