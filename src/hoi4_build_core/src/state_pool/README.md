@@ -119,5 +119,3 @@ flowchart TD
 - State indices are stable for the lifetime of a state; reuse only happens after it has refcount zero and is reclaimed from `zero_ref_queue`.
 - `open` heap contains indices `< heap_bound`. The pool ensures bound growth before any operation that would violate this.
 - `state_to_idx` remains consistent with `states` except during the brief reclamation step when the old key is removed prior to reuse.
-
-

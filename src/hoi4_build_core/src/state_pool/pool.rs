@@ -431,5 +431,3 @@ mod tests {
         assert!(pool.heap_size() >= 1);
     }
 }
-
-
