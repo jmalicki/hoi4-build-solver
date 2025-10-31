@@ -57,7 +57,7 @@ def _safe_int(value) -> int:
     if pd.isna(value):
         return 0
     s = str(value).strip()
-    if not s or s == "":
+    if not s:
         return 0
     try:
         return int(float(s))  # Handle "1.0" -> 1
@@ -121,7 +121,7 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
     for _, row in df.iterrows():
         # Skip rows with empty/invalid names
         node_name = str(row["nodeName"]).strip()
-        if not node_name or node_name == "" or node_name.lower() == "nan":
+        if not node_name or node_name.lower() == "nan":
             continue
 
         effective_slots = (

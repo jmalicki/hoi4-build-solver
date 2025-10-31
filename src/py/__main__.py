@@ -5,14 +5,17 @@ import pandas as pd
 from .sheets import load_nodes_from_gsheet, Node
 
 try:
-    import hoi4_mdp_core, os, glob, stat
+    import glob
+    import os
+    import stat
+    import time
+
+    import hoi4_mdp_core
 
     pkg_dir = os.path.dirname(hoi4_mdp_core.__file__)
     so = glob.glob(os.path.join(pkg_dir, "*.so"))[0]
     print(f"Loaded from: {so}")
     print(f"Modified: {os.stat(so).st_mtime}")
-    import time
-
     print(f"Time: {time.ctime(os.stat(so).st_mtime)}")
 
 except Exception as e:
@@ -28,7 +31,7 @@ def _safe_int(value) -> int:
     if pd.isna(value):
         return 0
     s = str(value).strip()
-    if not s or s == "":
+    if not s:
         return 0
     try:
         return int(float(s))  # Handle "1.0" -> 1
