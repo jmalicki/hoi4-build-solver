@@ -1,0 +1,84 @@
+# Pre-commit configuration for polyglot repo (Python + Rust)
+# Install: pipx install pre-commit  (or: brew install pre-commit)
+# Setup:   pre-commit install && pre-commit install --hook-type commit-msg
+
+minimum_pre_commit_version: '3.0.0'
+fail_fast: false
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  # General hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ['--maxkb=5000']
+
+  # Markdown linting for docs and README
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        args: ['--config', '.markdownlint.json']
+        files: '^(README\.md|docs/.*\.md)$'
+
+  # Spell checking (docs + README + Python sources)
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.3.0
+    hooks:
+      - id: codespell
+        args: ['--skip', 'target/,**/*.lock']
+        files: '^(README\.md|docs/|src/py/).+'
+
+  # Python formatting (src/py)
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ['--line-length=100']
+        files: '^src/py/.*\\.py$'
+
+  # Python linting (optional; enable when ready)
+  # - repo: https://github.com/astral-sh/ruff-pre-commit
+  #   rev: v0.6.9
+  #   hooks:
+  #     - id: ruff
+  #       files: '^src/py/.*\\.py$'
+
+  # Rust formatting (run from crate subdir)
+  - repo: local
+    hooks:
+      - id: rustfmt-core
+        name: rustfmt (core)
+        entry: bash -lc 'cd src/hoi4_mdp_core && cargo fmt --all -- --check'
+        language: system
+        pass_filenames: false
+        files: '^src/hoi4_mdp_core/.*\\.rs$'
+
+      - id: clippy-core
+        name: clippy (core)
+        entry: bash -lc 'cd src/hoi4_mdp_core && cargo clippy --all-targets --all-features -- -D warnings'
+        language: system
+        pass_filenames: false
+        files: '^src/hoi4_mdp_core/.*\\.rs$'
+
+  # Conventional Commits (commit-msg hook)
+  - repo: local
+    hooks:
+      - id: commitlint
+        name: commitlint (conventional)
+        stages: [commit-msg]
+        entry: bash -lc 'npx --yes @commitlint/cli -x @commitlint/config-conventional -e'
+        language: system
+        pass_filenames: false
+
+
