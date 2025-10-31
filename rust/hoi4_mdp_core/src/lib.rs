@@ -480,11 +480,11 @@ fn solve_and_reconstruct(
 
     // State pool for managing states, reference counting, index reuse, and the heap
     let initial_heap_bound = 10_000_000; // Start with 10M, will grow as needed
-    let (mut pool, start_handle) = StatePool::<State, TransitionInfo>::new(initial_heap_bound, st.clone(), 0.0);
+    let mut pool = StatePool::<State, TransitionInfo>::new(initial_heap_bound);
 
-    // seed start state - push to heap
+    // seed start state - enqueue normally (no parent)
     let h0 = heuristic(&st, &desc, target_type_enum, target);
-    pool.heap_push(&start_handle, h0);
+    pool.enqueue_or_update_state(st.clone(), 0.0, None, 0, None, h0);
     // Global best known solution cost (upper bound). Initialize with greedy plan from start.
     let mut best_ub = upper_bound_convert_then_mil(&st, &desc, target_type_enum, target);
     let mut expanded: usize = 0;
@@ -574,7 +574,7 @@ fn solve_and_reconstruct(
             pool.enqueue_or_update_state(
                 successor.next_state,
                 cost_value,
-                &cur_handle,
+                Some(&cur_handle),
                 successor.node_index,
                 Some(TransitionInfo {
                     action: successor.action,
