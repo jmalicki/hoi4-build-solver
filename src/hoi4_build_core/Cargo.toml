@@ -1,10 +1,10 @@
 [package]
-name = "hoi4_mdp_core"
+name = "hoi4_build_core"
 version = "0.1.1"
 edition = "2024"
 
 [lib]
-name = "hoi4_mdp_core"
+name = "hoi4_build_core"
 crate-type = ["cdylib"]
 
 [dependencies]

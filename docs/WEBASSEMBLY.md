@@ -1,4 +1,4 @@
-# Running the HOI4 MDP Solver in the Browser via WebAssembly
+# Running the HOI4 Build Solver in the Browser via WebAssembly
 
 This document explores making the solver available as a standalone web app (no backend) by compiling the Rust core to
 WebAssembly (WASM). Users would load a web page, choose options corresponding to the current CLI flags, and compute
@@ -18,10 +18,10 @@ We organize the codebase at the project root with clear separation between Rust 
 WebAssembly front-ends:
 
 - Project layout:
-  - `src/hoi4_mdp_core/` – pure Rust domain + solver API (no PyO3/wasm-bindgen)
+  - `src/hoi4_build_core/` – pure Rust domain + solver API (no PyO3/wasm-bindgen)
   - `src/py/` – Python CLI and PyO3 bindings (enabled by default via Cargo feature `pyo3`)
   - `src/wasm/` – wasm-bindgen bindings (enabled by optional Cargo feature `wasm`)
-  - Within `src/hoi4_mdp_core/src/`: `core/`, `py/`, `wasm/` submodules with existing modules (`state_pool`,
+  - Within `src/hoi4_build_core/src/`: `core/`, `py/`, `wasm/` submodules with existing modules (`state_pool`,
     `heuristic`) reused
 
 ## Decoupling PyO3 (Default) and WASM (Optional)
@@ -82,7 +82,7 @@ duplication.
 
 ## Current Architecture Fit
 
-- Rust core (`src/hoi4_mdp_core`): Primary compute is in Rust and already largely self-contained. Good candidate for
+- Rust core (`src/hoi4_build_core`): Primary compute is in Rust and already largely self-contained. Good candidate for
   WASM.
 - Python layer (`src/py`): Handles CLI, CSV/Sheets I/O, and calls into the Rust library via PyO3. This layer cannot run
   in-browser. We will replicate only the small amount of I/O/parsing behavior in JS/TS.
@@ -138,11 +138,11 @@ duplication.
 Typical steps:
 
 ```bash
-# In crate (rust/hoi4_mdp_core)
+# In crate (rust/hoi4_build_core)
 wasm-pack build --release --target web --out-dir pkg -- --features wasm
 
 # In web app
-npm install ./rust/hoi4_mdp_core/pkg
+npm install ./rust/hoi4_build_core/pkg
 # or publish pkg to a registry if needed
 ```
 

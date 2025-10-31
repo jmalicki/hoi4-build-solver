@@ -1,6 +1,6 @@
 # Heuristics Module
 
-This module implements pluggable heuristics for the HOI4 MDP solver. Each heuristic provides both:
+This module implements pluggable heuristics for the HOI4 build solver. Each heuristic provides both:
 - **Lower bound** (`lower_bound()`): An admissible heuristic `h(s)` for A* search
 - **Upper bound** (`upper_bound()`): An upper bound on remaining cost for pruning
 

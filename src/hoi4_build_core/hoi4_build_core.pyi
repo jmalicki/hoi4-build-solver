@@ -1,4 +1,4 @@
-"""Typed stub for the Rust extension module `hoi4_mdp_core`.
+"""Typed stub for the Rust extension module `hoi4_build_core`.
 
 PEP 561: This package ships type information for static type checkers.
 """

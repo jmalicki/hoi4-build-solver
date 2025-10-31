@@ -6,7 +6,7 @@ use crate::core;
 use crate::{NodeDesc, State, TargetType};
 
 // Custom Python exception to signal user-requested early stop
-pyo3::create_exception!(hoi4_mdp_core, SearchStoppedError, PyException);
+pyo3::create_exception!(hoi4_build_core, SearchStoppedError, PyException);
 
 /// Snapshot of solver progress, exposed to Python as a read-only class.
 #[pyclass]
@@ -128,10 +128,10 @@ fn solve_and_reconstruct(
 }
 
 #[pymodule]
-fn hoi4_mdp_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
+fn hoi4_build_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.setattr(
         "__doc__",
-        "Rust A* core for HOI4 MDP: solve_and_reconstruct(nodes, target, *, print_every, prune, heuristic)",
+        "Rust A* core for HOI4 build solver: solve_and_reconstruct(nodes, target, *, print_every, prune, heuristic)",
     )?;
     m.add_function(wrap_pyfunction!(solve_and_reconstruct, m)?)?;
     m.add("SearchStoppedError", _py.get_type::<SearchStoppedError>())?;

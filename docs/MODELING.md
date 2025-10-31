@@ -30,7 +30,7 @@
 
 ## A\* heuristic and pruning
 
-**See `rust/hoi4_mdp_core/src/heuristic/README.md` for detailed heuristic descriptions, theoretical background, and
+**See `rust/hoi4_build_core/src/heuristic/README.md` for detailed heuristic descriptions, theoretical background, and
 proofs of admissibility/consistency.** Also see `docs/PRUNING.md` for prune-before-enqueue and upper-bound strategy.
 
 The solver uses pluggable heuristics via the `Heuristic` trait. The default heuristic (`BestInfraUpperBoundHeuristic`)

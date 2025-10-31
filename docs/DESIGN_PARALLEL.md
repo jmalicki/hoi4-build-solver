@@ -2,7 +2,7 @@
 
 ## Overview
 
-The current MDP solver approximates construction by applying one action per timestep. This design extends the model to
+The current build solver approximates construction by applying one action per timestep. This design extends the model to
 handle parallel construction, where multiple projects can proceed simultaneously subject to factory allocation
 constraints.
 

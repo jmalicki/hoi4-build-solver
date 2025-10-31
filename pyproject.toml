@@ -1,12 +1,12 @@
 [project]
-name = "hoi4-mdp-solver"
+name = "hoi4-build-solver"
 version = "0.1.0"
-description = "MDP solver for HOI4-style build planning with CSV I/O"
+description = "Build solver for HOI4-style factory planning with CSV I/O"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "Joseph Malicki" }]
 dependencies = [
-  "hoi4_mdp_core",
+  "hoi4_build_core",
   "pymdptoolbox>=4.0b3",
   "numpy>=1.26",
   "scipy>=1.11",
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-hoi4-mdp-solve = "py.__main__:main"
+hoi4-build-solve = "py.__main__:main"
 
 [tool.uv]
 dev-dependencies = [
@@ -23,9 +23,9 @@ dev-dependencies = [
 ]
 cache-keys = [
   { file = "pyproject.toml" },
-  { file = "src/hoi4_mdp_core/Cargo.toml" },
-  { file = "src/hoi4_mdp_core/**/*.rs" }
+  { file = "src/hoi4_build_core/Cargo.toml" },
+  { file = "src/hoi4_build_core/**/*.rs" }
 ]
 
 [tool.uv.sources]
-hoi4_mdp_core = { path = "src/hoi4_mdp_core", editable = true }
+hoi4_build_core = { path = "src/hoi4_build_core", editable = true }

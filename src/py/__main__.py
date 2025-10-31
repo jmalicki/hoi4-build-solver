@@ -10,9 +10,9 @@ try:
     import stat
     import time
 
-    import hoi4_mdp_core
+    import hoi4_build_core
 
-    pkg_dir = os.path.dirname(hoi4_mdp_core.__file__)
+    pkg_dir = os.path.dirname(hoi4_build_core.__file__)
     so = glob.glob(os.path.join(pkg_dir, "*.so"))[0]
     print(f"Loaded from: {so}")
     print(f"Modified: {os.stat(so).st_mtime}")
@@ -20,7 +20,7 @@ try:
 
 except Exception as e:
     raise RuntimeError(
-        "Rust core (hoi4_mdp_core) is required. Ensure it is built and importable."
+        "Rust core (hoi4_build_core) is required. Ensure it is built and importable."
     ) from e
 
 
@@ -305,7 +305,7 @@ def main(
     try:
         # New signature (preferred): nodes, target_type, target, *, print_every, prune, heuristic, progress_callback
         # Pass required args positionally to accommodate environments that reject target_type as a keyword
-        moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
+        moves, final_state_vec, total_cost = hoi4_build_core.solve_and_reconstruct(
             rust_nodes,
             target_type_lower,
             int(target_value),
@@ -321,7 +321,7 @@ def main(
             raise click.UsageError(
                 "Installed core uses legacy signature (military-only). Run with --target-type military or rebuild core."
             )
-        moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
+        moves, final_state_vec, total_cost = hoi4_build_core.solve_and_reconstruct(
             rust_nodes,
             int(target_value),
             verbose=verbose,

@@ -74,17 +74,17 @@ repos:
     hooks:
       - id: rustfmt-core
         name: rustfmt (core)
-        entry: bash -lc 'cd src/hoi4_mdp_core && cargo fmt --all'
+        entry: bash -lc 'cd src/hoi4_build_core && cargo fmt --all'
         language: system
         pass_filenames: false
-        files: '^src/hoi4_mdp_core/.*\\.rs$'
+        files: '^src/hoi4_build_core/.*\\.rs$'
 
       - id: clippy-core
         name: clippy (core)
-        entry: bash -lc 'cd src/hoi4_mdp_core && cargo clippy --all-targets --all-features -- -D warnings'
+        entry: bash -lc 'cd src/hoi4_build_core && cargo clippy --all-targets --all-features -- -D warnings'
         language: system
         pass_filenames: false
-        files: '^src/hoi4_mdp_core/.*\\.rs$'
+        files: '^src/hoi4_build_core/.*\\.rs$'
 
   # Conventional Commits (commit-msg hook)
   - repo: local

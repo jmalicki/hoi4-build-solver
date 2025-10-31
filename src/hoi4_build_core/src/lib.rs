@@ -1,4 +1,4 @@
-// High-performance A* solver for the HOI4 build planning MDP.
+// High-performance A* solver for HOI4 build planning.
 //
 // This crate implements the core search loop and domain logic in Rust and exposes
 // a minimal Python API via PyO3 (in src/py). The Python layer handles CSV/Sheets I/O,
@@ -48,7 +48,7 @@ pub(crate) struct NodeState {
 #[derive(Clone, Eq, PartialEq, Hash, Default)]
 pub(crate) struct State(pub(crate) Vec<NodeState>);
 
-/// Target type for the MDP goal.
+/// Target type for the build planning goal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TargetType {
     Military,

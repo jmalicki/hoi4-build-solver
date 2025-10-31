@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the refactoring to support pluggable heuristics in the HOI4 MDP solver. The goal is to enable
+This document describes the refactoring to support pluggable heuristics in the HOI4 build solver. The goal is to enable
 experimentation with different heuristic strategies while maintaining a clean, extensible architecture.
 
 ## Current State

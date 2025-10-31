@@ -84,7 +84,7 @@
   in place. This avoids the O(n log n) rebuild and keeps heap content intact without re-pushes.
 - Why acceptable now:
   - The exact internal layout for 1.7.0 was verified and encoded with `#[repr(C)]` mirror structs in
-    `rust/hoi4_mdp_core/src/heap_growth.rs`.
+    `rust/hoi4_build_core/src/heap_growth.rs`.
   - We added invariant-heavy tests that run after growth:
     - Pop order remains correct; `decrease_key` works post-growth.
     - Internal positions vector length reflects the new bound.

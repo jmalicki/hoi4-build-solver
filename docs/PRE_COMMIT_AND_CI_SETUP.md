@@ -8,8 +8,8 @@ this repository. It is based on analysis of existing repositories under `github.
 This repository is a **Python + Rust (PyO3)** hybrid project:
 
 - **Python**: Primary interface using `uv` for dependency management
-- **Rust**: Core library (`hoi4_mdp_core`) compiled as a PyO3 extension module
-- **Structure**: Python CLI wrapper around Rust core for MDP solver functionality
+- **Rust**: Core library (`hoi4_build_core`) compiled as a PyO3 extension module
+- **Structure**: Python CLI wrapper around Rust core for build solver functionality
 
 ## 1. Pre-commit Hooks Configuration
 
@@ -68,7 +68,7 @@ repos:
     hooks:
       - id: rustfmt
         args: [--edition, "2021", --all]
-        files: '^src/hoi4_mdp_core/.*\.rs$|^.*/Cargo\.toml$'
+        files: '^src/hoi4_build_core/.*\.rs$|^.*/Cargo\.toml$'
 
   # Rust linting (clippy)
   - repo: https://github.com/pre-commit/mirrors-clippy
@@ -93,7 +93,7 @@ repos:
             -D,
             clippy::must_use_candidate,
           ]
-        files: '^src/hoi4_mdp_core/.*\.rs$'
+        files: '^src/hoi4_build_core/.*\.rs$'
         pass_filenames: false
 
   # Comprehensive Rust quality checks (CI-only)
@@ -391,7 +391,7 @@ jobs:
 
       - name: Run Rust tests
         run: cargo test --all-features --lib
-        working-directory: src/hoi4_mdp_core
+        working-directory: src/hoi4_build_core
 
   # Security Audit
   security:
@@ -435,7 +435,7 @@ jobs:
 
       - name: Build Rust documentation
         run: cargo doc --document-private-items --no-deps --all-features
-        working-directory: src/hoi4_mdp_core
+        working-directory: src/hoi4_build_core
         env:
           RUSTDOCFLAGS: -D warnings
 
@@ -443,7 +443,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rust-docs
-          path: src/hoi4_mdp_core/target/doc
+          path: src/hoi4_build_core/target/doc
           retention-days: 30
 ```
 
@@ -518,7 +518,7 @@ jobs:
       - uses: google-github-actions/release-please-action@v4
         with:
           release-type: python
-          package-name: hoi4-mdp-solver
+          package-name: hoi4-build-solver
 ```
 
 ## 3. README Badges

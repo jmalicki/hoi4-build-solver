@@ -1,4 +1,4 @@
-//! Pluggable heuristics for the HOI4 MDP solver.
+//! Pluggable heuristics for the HOI4 build solver.
 //!
 //! This module defines the `Heuristic` trait and provides implementations.
 //! Heuristics provide both admissible lower bounds (for A*) and upper bounds (for pruning).

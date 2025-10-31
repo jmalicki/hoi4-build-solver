@@ -104,7 +104,7 @@ minimizing **totalCost**. The program will take the initial list of nodes and th
 
 ### Solution approach
 
-- Rust crate `hoi4_mdp_core` (lib):
+- Rust crate `hoi4_build_core` (lib):
   - Encodes state as a compact struct (per-node `(infra,civ,mil)` with `numSlots` from inputs) and provides:
     - `iter_successors(state) -> iterator` yielding feasible successors and costs without heap allocations.
     - `heuristic(state) -> f64` per docs/MODELING.md (best-case infra, `civUpper = civ + max(0, empty - remainingMil)`).
@@ -135,7 +135,7 @@ minimizing **totalCost**. The program will take the initial list of nodes and th
 
 ### Migration plan
 
-1. Create Rust crate `hoi4_mdp_core` with PyO3 bindings that match current Python signatures.
+1. Create Rust crate `hoi4_build_core` with PyO3 bindings that match current Python signatures.
 2. Port: state struct, cost model, successor generator, heuristic, A\* loop, path reconstruction.
 3. Replace Python implementations with Rust calls, keeping CLI unchanged.
 4. Validate parity against current Python solver using the same inputs; compare totalCost and moves length.

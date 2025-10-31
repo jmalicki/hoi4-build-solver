@@ -35,7 +35,7 @@ Constraint per node: numMilitary + numCivilian ≤ numSlots.
 ## Run the solver
 
 ```bash
-hoi4-mdp-solve \
+hoi4-build-solve \
   --input nodes.csv \
   --target 30 \
   --moves-out moves.csv \
@@ -52,7 +52,7 @@ hoi4-mdp-solve \
 Alternatively, read directly from a Google Sheet (uses CSV export of the active tab):
 
 ```bash
-hoi4-mdp-solve \
+hoi4-build-solve \
   --sheet-url \
   "https://docs.google.com/spreadsheets/d/.../edit?gid=1859149470\
 #gid=1859149470" \
