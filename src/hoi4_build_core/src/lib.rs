@@ -123,6 +123,7 @@ pub(crate) struct TransitionInfo {
     /// Action label ("civilian", "military", "infra", "convert") - domain-specific
     action: &'static str,
     /// Step cost from parent to this state - domain-specific (could be generic, but stored here for convenience)
+    #[allow(dead_code)]
     cost: f64,
 }
 

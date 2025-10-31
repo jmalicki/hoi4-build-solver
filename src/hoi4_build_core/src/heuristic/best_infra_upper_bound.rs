@@ -56,6 +56,9 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
 
         // Optimistic denominator bound (global), as in docs/MODELING.md
         let civ_upper = (sum_civ + (empty - remaining).max(0)).max(1) as f64;
+        // Using max infra (5) is valid for a lower bound: the infra multiplier appears in the
+        // denominator, so using the maximum multiplier gives the minimum cost estimate, ensuring
+        // the bound remains admissible (≤ actual cost).
         let best_mult = 1.0 + (2.0 * 5.0) / 10.0;
 
         match target_type {
