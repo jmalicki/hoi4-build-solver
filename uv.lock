@@ -64,17 +64,17 @@ wheels = [
 ]
 
 [[package]]
-name = "hoi4-mdp-core"
+name = "hoi4-build-core"
 version = "0.1.1"
-source = { editable = "src/hoi4_mdp_core" }
+source = { editable = "src/hoi4_build_core" }
 
 [[package]]
-name = "hoi4-mdp-solver"
+name = "hoi4-build-solver"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "click" },
-    { name = "hoi4-mdp-core" },
+    { name = "hoi4-build-core" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pandas" },
@@ -91,7 +91,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
-    { name = "hoi4-mdp-core", editable = "src/hoi4_mdp_core" },
+    { name = "hoi4-build-core", editable = "src/hoi4_build_core" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "pandas", specifier = ">=2.0" },
     { name = "pymdptoolbox", specifier = ">=4.0b3" },
