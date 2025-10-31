@@ -32,6 +32,8 @@ where `c(s,a)` is the cost of action `a` from state `s`.
 
 ### `BestInfraUpperBoundHeuristic`
 
+String name for Python CLI: `--heuristic=best_infra_upper_bound` (alias: `standard`)
+
 **Full name**: Best-case infrastructure with upper-bound civilians heuristic
 
 **Key assumptions**:
@@ -119,7 +121,9 @@ The upper bound uses a greedy "convert then build" strategy:
 
 **Use for pruning**: If `g(s) + ub(s) > best_known_solution_cost`, we can safely prune state `s` (no optimal path goes through it).
 
-### `ZeroHeuristic` (string name: `djikstra`)
+### `ZeroHeuristic`
+
+String name for Python CLI: `--heuristic=djikstra` (aliases: `dijkstra`, `zero`)
 
 - `lower_bound(s) = 0` for all states `s` (admissible but weakest possible)
 - `upper_bound(s) = +∞` (disables pruning)
