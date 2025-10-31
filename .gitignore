@@ -8,3 +8,8 @@ src/*/target/
 
 # macOS
 .DS_Store
+
+# Generated data/output (root)
+/*.csv
+solver_output.log
+tmp_*.csv
