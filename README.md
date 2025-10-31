@@ -1,5 +1,9 @@
 # HOI4 Build Solver
 
+[![CI](https://github.com/jmalicki/hoi4-build-solver/actions/workflows/ci.yml/badge.svg)](https://github.com/jmalicki/hoi4-build-solver/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CodeRabbit](https://img.shields.io/badge/CodeRabbit-Enabled-brightgreen)](https://coderabbit.ai)
+
 ## Setup with uv and virtualenv
 
 Prerequisites: Python 3.10+ and `uv` installed. Install uv from
