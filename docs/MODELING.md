@@ -29,5 +29,3 @@ The solver uses pluggable heuristics via the `Heuristic` trait. The default heur
 We apply prune-before-enqueue: for each successor, if `g + h ≥ best_ub` (or component UBs say a branch cannot beat `best_ub`), we drop it without touching the heap or reference counts. See PRUNING.md for details and invariants.
 
 For complete details, implementation notes, and theoretical proofs, see the heuristic module README.
-
-

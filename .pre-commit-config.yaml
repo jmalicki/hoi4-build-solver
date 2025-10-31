@@ -35,7 +35,7 @@ repos:
     rev: v2.3.0
     hooks:
       - id: codespell
-        args: ['--skip', 'target/,**/*.lock']
+        args: ['--skip', 'target/,**/*.lock', '-L', 'crate']  # 'crate' is valid in Rust context
         files: '^(README\.md|docs/|src/py/).+'
 
   # Python formatting (src/py)
@@ -80,5 +80,3 @@ repos:
         entry: bash -lc 'npx --yes @commitlint/cli -x @commitlint/config-conventional -e'
         language: system
         pass_filenames: false
-
-

@@ -27,7 +27,3 @@ cache-keys = [
 
 [tool.uv.sources]
 hoi4_mdp_core = { path = "src/hoi4_mdp_core", editable = true }
-
-
-
-

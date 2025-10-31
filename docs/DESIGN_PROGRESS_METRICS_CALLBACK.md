@@ -116,5 +116,3 @@ Conclusion: `f` is the correct anytime signal; it balances progress so far with 
 - Clean separation of compute (core) from presentation (front-ends).
 - Reusable across Python CLI, Node CLI, and Web UI.
 - Enables rich UI: progress bars, charts, benchmarking dashboards, without changing core code.
-
-

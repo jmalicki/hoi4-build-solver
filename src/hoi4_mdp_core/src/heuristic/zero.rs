@@ -35,5 +35,3 @@ impl Heuristic for ZeroHeuristic {
         "djikstra"
     }
 }
-
-

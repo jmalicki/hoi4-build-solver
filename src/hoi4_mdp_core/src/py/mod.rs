@@ -131,5 +131,3 @@ fn hoi4_mdp_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add("SearchStoppedError", _py.get_type::<SearchStoppedError>())?;
     Ok(())
 }
-
-

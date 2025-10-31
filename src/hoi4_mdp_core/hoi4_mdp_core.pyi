@@ -17,7 +17,7 @@ def solve_and_reconstruct(
     nodes: List[Tuple[str, int, int, int, int]],
     target_type: str,
     target: int,
-    verbose: bool = False, 
+    verbose: bool = False,
     print_every: int = 1,
     prune: bool = False,
 ) -> Tuple[List[Tuple[str, str]], List[Tuple[int, int, int]], float]: ...

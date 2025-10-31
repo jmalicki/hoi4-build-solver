@@ -92,5 +92,3 @@ Why better than other proposals (for now)
 Trade-offs and Migration Plan
 
 - We deliberately removed the previous broad unsafe hacks and replaced them with a narrow, capacity-only resize guarded by tests. If upstream adds safe APIs, we will migrate and delete the unsafe code. If the crate updates or we unpin, CI must fail until we re-validate the mirror layout and tests.
-
-

@@ -54,5 +54,3 @@ Roadmap
 - Phase 2: Introduce Kani harnesses for prune decisions and bound arithmetic.
 - Phase 3: Add Creusot/Prusti contracts for spec helpers; gradually prove key lemmas.
 - Phase 4: Consider Verus for end-to-end properties on a reduced core if needed.
-
-

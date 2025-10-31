@@ -114,15 +114,15 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
     if bool(input_path) == bool(sheet_url):
         raise click.UsageError("Provide exactly one of --input or --sheet-url")
     nodes = load_nodes_from_csv(input_path) if input_path else load_nodes_from_gsheet(sheet_url)  # type: ignore[arg-type]
-    
+
     # Normalize target type
     target_type_lower = target_type.lower()
-    
+
     # Calculate initial values
     init_total_mil = sum(n.num_military for n in nodes)
     init_total_civ = sum(n.num_civilian for n in nodes)
     init_total_factories = init_total_mil + init_total_civ
-    
+
     # Validate target based on type
     if target_type_lower == "military":
         if target_value < init_total_mil:
@@ -150,7 +150,7 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
         click.echo(f"Current factories: {init_total_factories} | Target factories: {target_value} | Additional needed: {needed} | Max possible: {max_possible}")
     else:
         raise ValueError(f"Invalid target type: {target_type}")
-    
+
     empty_slots = sum(n.num_slots - (n.num_civilian + n.num_military) for n in nodes)
     click.echo(f"Empty slots: {empty_slots}")
 
@@ -220,5 +220,3 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
 
 if __name__ == "__main__":
     main()
-
-

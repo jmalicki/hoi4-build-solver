@@ -33,5 +33,3 @@ jobs:
         run: |
           git status --porcelain
           git --no-pager diff --color=always || true
-
-

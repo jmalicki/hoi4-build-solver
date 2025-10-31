@@ -32,5 +32,3 @@ impl<S: Hash + Eq + Clone + Default, T> StateHandle<S, T> {
 impl<S: Hash + Eq + Clone + Default, T> Drop for StateHandle<S, T> {
     fn drop(&mut self) { unsafe { (*self.pool_ptr).decrement_ref_count(self.idx); } }
 }
-
-

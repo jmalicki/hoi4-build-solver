@@ -112,5 +112,3 @@ The goal is to reach a state where the sum of military factories over all nodes 
 
 - Python reference implementation for correctness and CLI.
 - Performance-sensitive components to be implemented in C++20, exposed to Python (e.g., pybind11), and optionally leveraging AI-Toolbox.
-
-

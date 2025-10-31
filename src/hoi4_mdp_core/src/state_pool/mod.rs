@@ -5,5 +5,3 @@ mod pool;
 pub use non_max_usize::NonMaxUsize;
 pub use handle::StateHandle;
 pub use pool::StatePool;
-
-

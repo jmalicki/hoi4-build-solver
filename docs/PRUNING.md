@@ -48,4 +48,3 @@ Operational Notes
 - All calculations use the active target type; mixing target assumptions breaks admissibility/consistency.
 
 See `docs/PROOF_TESTING.md` for a full strategy covering property-based testing, contracts, model checking with Kani, and deductive verification (Creusot/Prusti/Verus).
-

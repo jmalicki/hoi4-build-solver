@@ -31,7 +31,7 @@ The `Heuristic` trait defines the interface all heuristics must implement:
 ```rust
 pub trait Heuristic: Send + Sync {
     /// Admissible lower bound on remaining cost from state `st`.
-    /// 
+    ///
     /// Must satisfy: h(s) <= actual optimal cost from s to goal
     /// Returns a non-negative value.
     fn lower_bound(
@@ -43,7 +43,7 @@ pub trait Heuristic: Send + Sync {
     ) -> f64;
 
     /// Upper bound on remaining cost from state `st`.
-    /// 
+    ///
     /// Used for pruning: if g(s) + ub(s) > best_known_solution_cost,
     /// we can prune state s. Returns f64::INFINITY if no bound is known.
     fn upper_bound(

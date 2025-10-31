@@ -238,5 +238,3 @@ Refactor outline:
 - `core::solve`: `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType, target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
 - `py_api`: converts Python tuples ↔ `Node`, calls `core`
 - `wasm_api`: converts JS objects ↔ `Node` via `serde_wasm_bindgen`, calls `core`
-
-

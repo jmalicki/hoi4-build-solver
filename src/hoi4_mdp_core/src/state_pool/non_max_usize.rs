@@ -20,5 +20,3 @@ impl NonMaxUsize {
 impl From<NonMaxUsize> for usize {
     fn from(val: NonMaxUsize) -> Self { val.get() }
 }
-
-

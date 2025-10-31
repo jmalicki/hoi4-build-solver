@@ -166,29 +166,29 @@ struct ConstructionQueue {
 impl ConstructionQueue {
     /// Create empty queue
     fn new() -> Self;
-    
+
     /// Add construction item to queue (if capacity allows)
     /// Stores raw base_cost (7200 for military, etc.) - infra/factory allocation computed later
     fn try_add(&self, node_idx: usize, action: Action, base_cost: f64) -> Option<Self>;
-    
+
     /// Allocate factories to queue items in FIFO order (computed on-demand)
     /// Uses current total_civilian from state
     /// Returns Vec<(item_index, factories_allocated)>
     fn allocate_factories(&self, total_civilian: u32) -> Vec<(usize, u8)>;
-    
+
     /// Advance time to next completion, updating queue and returning completed items
     /// Factory allocation and infra_multiplier are recomputed from current state (both implicit)
     /// delta_t = min(cost_remaining / (infra_mult * factories_allocated)) across all items
     /// Maintains invariant: cost_remaining >= 0 for all items
     fn advance_to_next_completion(&mut self, nodes: &[NodeState], node_descs: &[NodeDesc]) -> (f64, Vec<CompletedItem>);
     // Returns (time_elapsed, completed_items)
-    
+
     /// Check if factories are fully utilized
     fn factories_fully_utilized(&self, total_civilian: u32) -> bool;
-    
+
     /// Get current queue length
     fn len(&self) -> usize;
-    
+
     /// Check if queue is empty
     fn is_empty(&self) -> bool;
 }
@@ -205,10 +205,10 @@ struct CompletedItem {
 impl State {
     /// Create initial state from node configurations
     fn new(nodes: Vec<NodeState>) -> Self;
-    
+
     /// Access construction queue
     fn construction_queue(&self) -> &ConstructionQueue;
-    
+
     /// Access construction queue mutably
     fn construction_queue_mut(&mut self) -> &mut ConstructionQueue;
 }
@@ -220,7 +220,7 @@ impl State {
 fn iter_successors(state: &State, nodes: &[NodeDesc]) -> impl Iterator<Item = Successor> {
     // Phase 1: Generate states with new construction items added
     let base_successors = generate_construction_items(state, nodes);
-    
+
     // Phase 2: For each, conditionally advance time
     base_successors.flat_map(move |mut succ| {
         let total_civ = succ.next_state.total_civilian();
@@ -265,7 +265,7 @@ The `moves.csv` output format remains the same as before - each action represent
 
 **Example**: The moves.csv looks identical to before:
 - `(A, "military")`
-- `(B, "military")`  
+- `(B, "military")`
 - `(C, "military")`
 
 But internally, between each enqueue, time may advance automatically and items may complete, updating the state accordingly. These intermediate transitions are compressed - the user only sees the sequence of enqueue decisions.
@@ -296,4 +296,3 @@ The heuristic `h(s)` needs to account for the construction queue:
      - After: `effective_time = 2400 / (2.0 * 10) = 120` days (faster! Higher multiplier = faster completion)
 
 3. **FIFO factory allocation**: Factories are allocated in queue order (first-in, first-out). This is the simplest model and matches typical game behavior. Optimizing allocation order would require solving a harder subproblem and is deferred.
-

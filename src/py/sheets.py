@@ -26,7 +26,7 @@ _GID_RE = re.compile(r"[#&?]gid=(\d+)")
 def to_export_csv_url(sheet_url: str) -> str:
     """
     Convert a Google Sheets URL to a CSV export URL.
-    
+
     Supports URLs with or without gid parameter:
     - With gid: .../edit?gid=123 -> .../export?format=csv&gid=123
     - Without gid: .../edit -> .../export?format=csv (exports first tab)
@@ -39,7 +39,7 @@ def to_export_csv_url(sheet_url: str) -> str:
             "Expected format: https://docs.google.com/spreadsheets/d/SHEET_ID/..."
         )
     sheet_id = sheet_id_match.group(1)
-    
+
     # Extract gid if present (from query params, hash, or #gid=...)
     gid_match = _GID_RE.search(sheet_url)
     if gid_match:
@@ -118,16 +118,16 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
         node_name = str(row["nodeName"]).strip()
         if not node_name or node_name == '' or node_name.lower() == 'nan':
             continue
-        
+
         effective_slots = _safe_int(row["numSlots"]) - _safe_int(row.get("Docks", 0)) - _safe_int(row.get("Refineries", 0))
         if effective_slots < 0:
             raise ValueError(f"Effective slots negative after subtracting Docks/Refineries for node {node_name}")
-        
+
         num_infra = _safe_int(row["numInfra"])
         if num_infra < 0 or num_infra > 5:
             # Skip rows with invalid infra values
             continue
-        
+
         node = Node(
             name=node_name,
             num_slots=effective_slots,
@@ -141,5 +141,3 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
             raise ValueError(f"Capacity exceeded on node {node.name}")
         nodes.append(node)
     return nodes
-
-

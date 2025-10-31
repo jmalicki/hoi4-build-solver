@@ -59,5 +59,3 @@ Provide exactly one of `--input` or `--sheet-url`.
 
 - Uses A* over an implicit state graph with an admissible, consistent heuristic; no full state enumeration.
 - Goal condition: sum(numMilitary) == target.
-
-
