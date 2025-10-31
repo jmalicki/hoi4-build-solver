@@ -74,14 +74,8 @@ jobs:
 
   # Tests
   test:
-    name: Test (${{ matrix.python }} / ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        python: ["3.10", "3.11", "3.12"]
-        rust: [stable]
+    name: Test
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -89,7 +83,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.12"
 
       - name: Setup uv
         uses: astral-sh/setup-uv@v4
@@ -102,12 +96,12 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: cargo-${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-stable-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build Rust extension
         run: uv run --no-project --with maturin maturin develop --release -m src/hoi4_build_core/Cargo.toml
