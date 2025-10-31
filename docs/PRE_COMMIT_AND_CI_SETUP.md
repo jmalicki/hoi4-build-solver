@@ -114,7 +114,7 @@ repos:
     hooks:
       - id: codespell
         args: [
-          '-L', 'crate,teh,nd',  # Extend ignore list as needed
+          '-L', 'crate,the,nd',  # Extend ignore list as needed
           '--skip', '*.lock,*.toml,target/,Cargo.lock,uv.lock',
         ]
 
@@ -680,4 +680,3 @@ Configure in GitHub repository settings:
 ---
 
 **Note**: This document is a planning document and will not be committed to the repository as per user requirements. It serves as a reference for implementing the CI/CD setup.
-

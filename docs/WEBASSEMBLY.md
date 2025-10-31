@@ -79,28 +79,44 @@ This approach ensures the CLI remains the default experience while enabling an o
 
 2) JS-friendly data model
 
-- Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]` (array of tuples) or an object array with named fields. Prefer an object array for readability: `{ name, numSlots, numInfra, numCivilian, numMilitary }`.
-- Return: `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ, mil } ], totalCost }`.
+- Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]`
+  (array of tuples) or an object array with named fields.
+  Prefer an object array for readability:
+  `{ name, numSlots, numInfra, numCivilian, numMilitary }`.
+- Return: `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ,
+  mil } ], totalCost }`.
 
 3) Logging and progress
 
-- `println!` does not surface in browser console by default. Expose an optional callback via `wasm_bindgen` (e.g., `set_logger(cb)`), or return periodic progress via an async iterator pattern. Simpler: accept a boolean `verbose` and periodically call a JS callback provided by the UI.
+- `println!` does not surface in browser console by default.
+  Expose an optional callback via `wasm_bindgen` (e.g., `set_logger(cb)`),
+  or return periodic progress via an async iterator pattern.
+  Simpler: accept a boolean `verbose` and periodically call a JS
+  callback provided by the UI.
 
 4) Long-running compute
 
-- Run the solver in a **Web Worker** (or dedicated Worker in Vite/React) to avoid freezing the main thread.
-- Provide a cancel mechanism (e.g., set an atomic flag exposed to Rust via `wasm-bindgen` or cooperative checks).
+- Run the solver in a **Web Worker** (or dedicated Worker in Vite/React)
+  to avoid freezing the main thread.
+- Provide a cancel mechanism (e.g., set an atomic flag exposed to Rust
+  via `wasm-bindgen` or cooperative checks).
 
 5) CSV and Google Sheets input
 
-- CSV: Use JS libraries (e.g., Papaparse) to parse CSV in-browser. Transform to the node array for WASM.
-- Google Sheets: Use the sheet's CSV export URL directly with `fetch` in the browser. Preprocess columns (including subtracting `Docks`/`Refineries`) on the JS side, to match the Python preprocessor behavior.
+- CSV: Use JS libraries (e.g., Papaparse) to parse CSV in-browser.
+  Transform to the node array for WASM.
+- Google Sheets: Use the sheet's CSV export URL directly with `fetch` in
+  the browser. Preprocess columns (including subtracting
+  `Docks`/`Refineries`) on the JS side, to match the Python preprocessor
+  behavior.
 
 ## Tooling
 
-- **wasm-bindgen / wasm-pack**: Build Rust to `wasm32-unknown-unknown` and generate a JS wrapper.
+- **wasm-bindgen / wasm-pack**: Build Rust to `wasm32-unknown-unknown` and
+  generate a JS wrapper.
 - **Bundler**: Vite or Webpack to bundle the generated WASM and the UI.
-- **TypeScript**: Define shared types that mirror the Rust `serde` structs.
+- **TypeScript**: Define shared types that mirror the Rust `serde`
+  structs.
 
 Typical steps:
 
@@ -115,12 +131,26 @@ npm install ./rust/hoi4_mdp_core/pkg
 
 ## Compatibility & Limitations
 
-- PyO3: Not available in WebAssembly. The web build must exclude PyO3 bindings.
-- Threads: WebAssembly threads require `SharedArrayBuffer` and cross-origin isolation (COOP/COEP) headers. The current solver is single-threaded; OK on normal pages. If we later parallelize, we must enable COOP/COEP and `-Z` atomics features and use a worker with `wasm-bindgen-rayon`.
-- Memory: `wasm32` has a practical memory limit (historically ~2–4GB). Large instances could hit memory ceilings. The current solver is optimized for dense indexing and reuse; still, large targets could be memory heavy. Mitigation: show memory usage, add guardrails, allow early cancel.
-- Performance: Rust→WASM is fast; however, browser JIT and GC around JS<->WASM boundary introduce some overhead. Avoid frequent cross-boundary calls in hot loops. Batch I/O; pass data in bulk.
-- Filesystem: No direct filesystem. Downloads are via `fetch` and user-triggered downloads (e.g., exporting CSV results).
-- Timeouts: Browsers can throttle background tabs or long-running tasks. Use Workers and keep UI responsive to avoid the page being considered unresponsive.
+- PyO3: Not available in WebAssembly. The web build must exclude PyO3
+  bindings.
+- Threads: WebAssembly threads require `SharedArrayBuffer` and
+  cross-origin isolation (COOP/COEP) headers. The current solver is
+  single-threaded; OK on normal pages. If we later parallelize, we must
+  enable COOP/COEP and `-Z` atomics features and use a worker with
+  `wasm-bindgen-rayon`.
+- Memory: `wasm32` has a practical memory limit (historically ~2–4GB).
+  Large instances could hit memory ceilings. The current solver is
+  optimized for dense indexing and reuse; still, large targets could be
+  memory heavy. Mitigation: show memory usage, add guardrails, allow
+  early cancel.
+- Performance: Rust→WASM is fast; however, browser JIT and GC around
+  JS<->WASM boundary introduce some overhead. Avoid frequent
+  cross-boundary calls in hot loops. Batch I/O; pass data in bulk.
+- Filesystem: No direct filesystem. Downloads are via `fetch` and
+  user-triggered downloads (e.g., exporting CSV results).
+- Timeouts: Browsers can throttle background tabs or long-running tasks.
+  Use Workers and keep UI responsive to avoid the page being considered
+  unresponsive.
 
 ## Proposed Web API (Rust)
 
@@ -227,9 +257,8 @@ After these refactors, revisit performance and UX: test large inputs in-browser,
 
 ## Moving Shareable Logic into Rust Core
 
-While Python and Web are separate front-ends, we should centralize only computational core logic in Rust so both consume the same behavior:
-
-
+While Python and Web are separate front-ends, we should centralize only
+computational core logic in Rust so both consume the same behavior:
 
 - Heuristic selection mapping from string → trait object
 - Progress/metrics collection (expanded, pruned, heap stats)
@@ -238,8 +267,12 @@ While Python and Web are separate front-ends, we should centralize only computat
 
 Optional to migrate (keep thin wrappers in front-ends):
 
-- CSV/Sheets parsing (browser/Python have native libs; keep parsing front-end specific)
-- Dock/Refinery preprocessing: front-ends can normalize columns, but a small Rust helper can also accept `{ name, numSlots, numInfra, numCivilian, numMilitary }` and compute effective slots given optional fields
+- CSV/Sheets parsing (browser/Python have native libs; keep parsing
+  front-end specific)
+- Dock/Refinery preprocessing: front-ends can normalize columns, but a
+  small Rust helper can also accept `{ name, numSlots, numInfra,
+  numCivilian, numMilitary }` and compute effective slots given optional
+  fields
 
 Front-end responsibilities (Node CLI and Web UI):
 
@@ -249,7 +282,11 @@ Front-end responsibilities (Node CLI and Web UI):
 
 Refactor outline:
 
-- `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`, `SolveMetrics`
-- `core::solve`: `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType, target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
+- `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`,
+  `SolveMetrics`
+- `core::solve`: `solve_and_reconstruct_core(nodes: Vec<Node>,
+  target_type: TargetType, target: i32, opts: SolveOpts) ->
+  (SolveResult, SolveMetrics)`
 - `py_api`: converts Python tuples ↔ `Node`, calls `core`
-- `wasm_api`: converts JS objects ↔ `Node` via `serde_wasm_bindgen`, calls `core`
+- `wasm_api`: converts JS objects ↔ `Node` via `serde_wasm_bindgen`,
+  calls `core`
