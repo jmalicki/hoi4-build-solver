@@ -52,7 +52,8 @@ where
             break;
         }
         if let Some(cb) = opts.progress_cb.as_mut()
-            && opts.print_every > 0 && (expanded == 1 || expanded.is_multiple_of(opts.print_every))
+            && opts.print_every > 0
+            && (expanded == 1 || expanded.is_multiple_of(opts.print_every))
         {
             let snap = ProgressSnapshot {
                 iterations: expanded,
@@ -81,8 +82,7 @@ where
                 return (
                     moves,
                     cur_state.clone(),
-                    cur_cost
-                        + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target),
+                    cur_cost + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target),
                 );
             }
         }
