@@ -43,7 +43,7 @@ struct NodeState {
 ///
 /// Stored as a vector to support variable numbers of nodes; hashing and equality
 /// are defined via derives on the inner elements and vector content.
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash, Default)]
 pub(crate) struct State(pub(crate) Vec<NodeState>);
 
 /// Target type for the MDP goal.
@@ -484,7 +484,7 @@ fn solve_and_reconstruct(
 
     // seed start state
     let start_idx = pool.insert_state(st.clone());
-    pool.g_mut().push(0.0);
+    pool.set_initial_cost(start_idx, 0.0);
     let h0 = heuristic(&st, &desc, target_type_enum, target);
     pool.heap_push(start_idx, h0);
     // Global best known solution cost (upper bound). Initialize with greedy plan from start.
@@ -505,13 +505,16 @@ fn solve_and_reconstruct(
         let _ = io::stdout().flush();
     }
     while let Some((cur_idx, _cur_f)) = pool.heap_pop() {
-        // heap_pop already handled ref count decrement and heap statistics
-        expanded += 1;
-
-        // Check if state was freed - if so, skip it (shouldn't happen, but be safe)
+        // heap_pop decremented ref count (no longer in heap), but we need to keep state alive during expansion
+        // Check if state was freed (shouldn't happen since we just popped it, but be safe)
         if !pool.is_active(cur_idx) {
             continue;
         }
+        
+        // Increment ref count BEFORE we start using it - this ensures it stays alive during expansion
+        // and until parent references are set in children (which will also increment it)
+        pool.increment_ref_count(cur_idx);
+        expanded += 1;
 
         let cur_g = pool.g(cur_idx);
         let cur = pool.get_state(cur_idx).unwrap();
@@ -525,12 +528,13 @@ fn solve_and_reconstruct(
         }
         if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
             let heap_avg_f = pool.heap_avg_f();
+            let iters_pretty = fmt_count(expanded);
             let heap_pretty = fmt_count(pool.heap_size());
             let states_pretty = fmt_count(pool.total_states());
             let pruned_pretty = fmt_count(pruned);
             let msg = format!(
                 "[A*] iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={}",
-                expanded, cur_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty
+                iters_pretty, cur_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty
             );
             println!("{}", msg);
             let _ = io::stdout().flush();
@@ -587,17 +591,23 @@ fn solve_and_reconstruct(
                 f,
             );
         }
+        // After processing all successors, parent references have been set (which incremented ref_count).
+        // Now we can decrement the ref count we added at the start of this iteration.
+        // If the state has children, their parent references will keep it alive (ref_count > 0).
+        // If it has no children, decrementing will free it, which is correct.
+        pool.decrement_ref_count(cur_idx);
     }
     if verbose {
         let heap_avg_f = pool.heap_avg_f();
+        let iters_pretty = fmt_count(expanded);
         let heap_pretty = fmt_count(pool.heap_size());
         let states_pretty = fmt_count(pool.total_states());
         let pruned_pretty = fmt_count(pruned);
         // Reuse cadence format; use goal_g if available, else 0.0. Show best_ub as candidate_total.
         let final_g = goal_i.map(|_| goal_g).unwrap_or(0.0);
         let msg = format!(
-            "[A*] final_iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
-            expanded, final_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
+            "[A*] iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
+            iters_pretty, final_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
         );
         println!("{}", msg);
         let _ = io::stdout().flush();
@@ -620,9 +630,10 @@ fn solve_and_reconstruct(
         }
         moves.reverse();
         if verbose {
+            let iters_pretty = fmt_count(expanded);
             println!(
                 "[A*] goal reached: total_cost={:.4} iters={}",
-                goal_g, expanded
+                goal_g, iters_pretty
             );
             let _ = io::stdout().flush();
         }
@@ -637,12 +648,13 @@ fn solve_and_reconstruct(
     } else {
         if verbose {
             let heap_avg_f = pool.heap_avg_f();
+            let iters_pretty = fmt_count(expanded);
             let heap_pretty = fmt_count(pool.heap_size());
             let states_pretty = fmt_count(pool.total_states());
             let pruned_pretty = fmt_count(pruned);
             let msg = format!(
                 "[A*] final_iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
-                expanded, 0.0, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
+                iters_pretty, 0.0, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
             );
             println!("{}", msg);
             let _ = io::stdout().flush();

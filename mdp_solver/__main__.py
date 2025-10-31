@@ -4,9 +4,31 @@ import click
 import pandas as pd
 from .sheets import load_nodes_from_gsheet, Node
 try:
-    import hoi4_mdp_core  # type: ignore
+    import hoi4_mdp_core, os, glob, stat
+    pkg_dir = os.path.dirname(hoi4_mdp_core.__file__)
+    so = glob.glob(os.path.join(pkg_dir, '*.so'))[0]
+    print(f'Loaded from: {so}')
+    print(f'Modified: {os.stat(so).st_mtime}')
+    import time
+    print(f'Time: {time.ctime(os.stat(so).st_mtime)}')
+
 except Exception as e:
     raise RuntimeError("Rust core (hoi4_mdp_core) is required. Ensure it is built and importable.") from e
+
+
+def _safe_int(value) -> int:
+    """
+    Safely convert a value to int, treating empty/whitespace/NaN as 0.
+    """
+    if pd.isna(value):
+        return 0
+    s = str(value).strip()
+    if not s or s == '':
+        return 0
+    try:
+        return int(float(s))  # Handle "1.0" -> 1
+    except (ValueError, TypeError):
+        return 0
 
 
 def load_nodes_from_csv(path: str) -> List["Node"]:
@@ -57,15 +79,15 @@ def load_nodes_from_csv(path: str) -> List["Node"]:
         df = df.rename(columns={ref_alias: "Refineries"})
     nodes: List[Node] = []
     for _, row in df.iterrows():
-        effective_slots = int(row["numSlots"]) - int(row["Docks"]) - int(row["Refineries"])
+        effective_slots = _safe_int(row["numSlots"]) - _safe_int(row.get("Docks", 0)) - _safe_int(row.get("Refineries", 0))
         if effective_slots < 0:
             raise ValueError(f"Effective slots negative after subtracting Docks/Refineries for node {row['nodeName']}")
         node = Node(
             name=str(row["nodeName"]),
             num_slots=effective_slots,
-            num_infra=int(row["numInfra"]),
-            num_civilian=int(row["numCivilian"]),
-            num_military=int(row["numMilitary"]),
+            num_infra=_safe_int(row["numInfra"]),
+            num_civilian=_safe_int(row["numCivilian"]),
+            num_military=_safe_int(row["numMilitary"]),
         )
         if node.num_infra < 0 or node.num_infra > 5:
             raise ValueError(f"numInfra out of range [0,5] for node {node.name}")
@@ -80,35 +102,63 @@ def load_nodes_from_csv(path: str) -> List["Node"]:
 @click.command()
 @click.option("--input", "input_path", required=False, type=click.Path(exists=True, dir_okay=False, readable=True), help="Input nodes CSV")
 @click.option("--sheet-url", "sheet_url", required=False, type=str, help="Google Sheet URL (will read the active tab via CSV export)")
-@click.option("--target", "target_military", required=True, type=int, help="Target total military across nodes")
+@click.option("--target-type", "target_type", required=True, type=click.Choice(["military", "civilian", "factories"], case_sensitive=False), help="Type of target: military (military factories only), civilian (civilian factories only), or factories (total factories)")
+@click.option("--target", "target_value", required=True, type=int, help="Target value for the selected target type")
 @click.option("--moves-out", "moves_out", required=True, type=click.Path(writable=True, dir_okay=False), help="Output CSV for moves")
 @click.option("--final-out", "final_out", required=True, type=click.Path(writable=True, dir_okay=False), help="Output CSV for final state")
 @click.option("--gamma", default=0.999, show_default=True, type=float, help="Discount factor")
-def main(input_path: str | None, sheet_url: str | None, target_military: int, moves_out: str, final_out: str, gamma: float) -> None:
+@click.option("--no-prune", "no_prune", is_flag=True, default=False, help="Disable pruning (default: pruning enabled)")
+@click.option("--print-every", "print_every", default=10000, show_default=True, type=int, help="Print progress every N iterations (0 to disable)")
+def main(input_path: str | None, sheet_url: str | None, target_type: str, target_value: int, moves_out: str, final_out: str, gamma: float, no_prune: bool, print_every: int) -> None:
     if bool(input_path) == bool(sheet_url):
         raise click.UsageError("Provide exactly one of --input or --sheet-url")
     nodes = load_nodes_from_csv(input_path) if input_path else load_nodes_from_gsheet(sheet_url)  # type: ignore[arg-type]
+    
+    # Normalize target type
+    target_type_lower = target_type.lower()
+    
+    # Calculate initial values
     init_total_mil = sum(n.num_military for n in nodes)
-    if target_military < init_total_mil:
-        raise ValueError("targetMilitary is less than current total military")
+    init_total_civ = sum(n.num_civilian for n in nodes)
+    init_total_factories = init_total_mil + init_total_civ
+    
+    # Validate target based on type
+    if target_type_lower == "military":
+        if target_value < init_total_mil:
+            raise ValueError(f"Target military ({target_value}) is less than current total military ({init_total_mil})")
+        max_possible = sum(n.num_slots for n in nodes)
+        if target_value > max_possible:
+            raise ValueError(f"Infeasible target: target={target_value} exceeds capacity={max_possible}")
+        needed = max(0, target_value - init_total_mil)
+        click.echo(f"Current military: {init_total_mil} | Target military: {target_value} | Additional needed: {needed} | Max possible: {max_possible}")
+    elif target_type_lower == "civilian":
+        if target_value < init_total_civ:
+            raise ValueError(f"Target civilian ({target_value}) is less than current total civilian ({init_total_civ})")
+        max_possible = sum(n.num_slots for n in nodes)
+        if target_value > max_possible:
+            raise ValueError(f"Infeasible target: target={target_value} exceeds capacity={max_possible}")
+        needed = max(0, target_value - init_total_civ)
+        click.echo(f"Current civilian: {init_total_civ} | Target civilian: {target_value} | Additional needed: {needed} | Max possible: {max_possible}")
+    elif target_type_lower == "factories":
+        if target_value < init_total_factories:
+            raise ValueError(f"Target factories ({target_value}) is less than current total factories ({init_total_factories})")
+        max_possible = sum(n.num_slots for n in nodes)
+        if target_value > max_possible:
+            raise ValueError(f"Infeasible target: target={target_value} exceeds capacity={max_possible}")
+        needed = max(0, target_value - init_total_factories)
+        click.echo(f"Current factories: {init_total_factories} | Target factories: {target_value} | Additional needed: {needed} | Max possible: {max_possible}")
+    else:
+        raise ValueError(f"Invalid target type: {target_type}")
+    
     empty_slots = sum(n.num_slots - (n.num_civilian + n.num_military) for n in nodes)
-    needed_mil = max(0, target_military - init_total_mil)
-    total_slots = sum(n.num_slots for n in nodes)
-    max_possible_mil = total_slots
-    if target_military > max_possible_mil:
-        raise ValueError(
-            f"Infeasible target: target={target_military} exceeds capacity={max_possible_mil}"
-        )
-    click.echo(
-        f"Empty slots: {empty_slots} | Additional military needed: {needed_mil} | Max possible military: {max_possible_mil}"
-    )
+    click.echo(f"Empty slots: {empty_slots}")
 
     rust_nodes = [(n.name, int(n.num_slots), int(n.num_infra), int(n.num_civilian), int(n.num_military)) for n in nodes]
     # Immediate banner to confirm run start before entering the solver
-    print(f"[A*] invoking rust core: target={target_military}, nodes={len(rust_nodes)}", flush=True)
+    print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}", flush=True)
     moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
-        rust_nodes, int(target_military), verbose=True, print_every=1,
-        prune=False,
+        rust_nodes, target_type_lower, int(target_value), verbose=True, print_every=print_every,
+        prune=not no_prune,
     )
     goal_state = tuple((int(i), int(c), int(m)) for (i, c, m) in final_state_vec)
 
