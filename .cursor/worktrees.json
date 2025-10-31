@@ -1,0 +1,8 @@
+{
+  "setup-worktree": [
+    "npm install",
+    "pipx install pre-commit || brew install pre-commit || pip install pre-commit",
+    "pre-commit install",
+    "pre-commit install --hook-type commit-msg"
+  ]
+}
