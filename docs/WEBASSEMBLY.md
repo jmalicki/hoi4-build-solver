@@ -8,15 +8,19 @@ This document explores making the solver available as a standalone web app (no b
 - **Approach**: Build a `wasm-bindgen`/`wasm-pack` target that exports a JS-friendly API. Implement a small UI (React/Vite or similar) that parses CSV/Sheets input client-side and calls the WASM solver. Use a Web Worker to keep the UI responsive.
 - **Not needed**: Any backend or server-side compute.
 
+## Project Structure
+
+We organize the codebase at the project root with clear separation between Rust core, Python CLI, and optional WebAssembly front-ends:
+
+- Project layout:
+  - `src/hoi4_mdp_core/` – pure Rust domain + solver API (no PyO3/wasm-bindgen)
+  - `src/py/` – Python CLI and PyO3 bindings (enabled by default via Cargo feature `pyo3`)
+  - `src/wasm/` – wasm-bindgen bindings (enabled by optional Cargo feature `wasm`)
+  - Within `src/hoi4_mdp_core/src/`: `core/`, `py/`, `wasm/` submodules with existing modules (`state_pool`, `heuristic`) reused
+
 ## Decoupling PyO3 (Default) and WASM (Optional)
 
 We keep one codebase with two front-ends over the same core logic. The CLI remains the default; the WebAssembly build is an optional feature.
-
-- Crate layout sketch:
-  - `src/core/` – pure Rust domain + solver API (no PyO3/wasm-bindgen)
-  - `src/py/` – PyO3 bindings (enabled by default via Cargo feature `pyo3`)
-  - `src/wasm/` – wasm-bindgen bindings (enabled by optional Cargo feature `wasm`)
-  - Existing modules (e.g., `state_pool`, `heuristic`) are reused from `core`.
 
 - Cargo features (illustrative):
   ```toml
@@ -56,8 +60,8 @@ This approach ensures the CLI remains the default experience while enabling an o
 
 ## Current Architecture Fit
 
-- Rust core (`rust/hoi4_mdp_core`): Primary compute is in Rust and already largely self-contained. Good candidate for WASM.
-- Python layer: Handles CLI, CSV/Sheets I/O, and calls into the Rust library via PyO3. This layer cannot run in-browser. We will replicate only the small amount of I/O/parsing behavior in JS/TS.
+- Rust core (`src/hoi4_mdp_core`): Primary compute is in Rust and already largely self-contained. Good candidate for WASM.
+- Python layer (`src/py`): Handles CLI, CSV/Sheets I/O, and calls into the Rust library via PyO3. This layer cannot run in-browser. We will replicate only the small amount of I/O/parsing behavior in JS/TS.
 - Heuristics: Now pluggable via a trait and factory; selection by string name maps naturally to web UI controls.
 
 ## Required Changes
@@ -215,7 +219,7 @@ After these refactors, revisit performance and UX: test large inputs in-browser,
 
 While Python and Web are separate front-ends, we should centralize only computational core logic in Rust so both consume the same behavior:
 
-- Heuristic selection mapping from string → trait object
+so f- Heuristic selection mapping from string → trait object
 - Progress/metrics collection (expanded, pruned, heap stats)
 - Path/moves reconstruction and final-state formatting
 - Pruning policy toggles and defaults

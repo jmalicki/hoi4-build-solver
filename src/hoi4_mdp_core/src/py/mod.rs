@@ -40,7 +40,7 @@ fn solve_and_reconstruct(
     target: i32,
     print_every: usize,
     prune: bool,
-    heuristic: String,
+    heuristic: &str,
     progress_callback: Option<Bound<PyAny>>,
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     // Parse target type
@@ -101,7 +101,7 @@ fn solve_and_reconstruct(
                 pruned: snap.pruned,
                 best_upper_bound: snap.best_upper_bound,
             };
-            Python::with_gil(|py| {
+            Python::with_gil(|_py| {
                 match cb.call1((py_snap,)) {
                     Ok(val) => val.extract::<bool>().unwrap_or(false),
                     Err(_) => false,
@@ -112,7 +112,7 @@ fn solve_and_reconstruct(
     let opts = core::SolveOptions {
         prune,
         print_every,
-        heuristic_name: &heuristic,
+        heuristic_name: heuristic,
         progress_cb: core_cb.as_mut(),
     };
     let (moves_idx, final_state_rs, total_cost) = core::solve_and_reconstruct_core(desc, st.clone(), target_type_enum, target, opts);

@@ -30,7 +30,7 @@ wheels = [
 
 [[package]]
 name = "hoi4-mdp-core"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "rust/hoi4_mdp_core" }
 
 [[package]]

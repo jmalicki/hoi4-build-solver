@@ -13,4 +13,7 @@ smallvec = "1.13"
 rapidhash = "4.1.1"
 orx-priority-queue = "=1.7.0"
 
+[dev-dependencies]
+proptest = "1.4"
+
 

@@ -69,7 +69,7 @@ The goal is to reach a state where the sum of military factories over all nodes 
     - `solve_a_star(init_state, target) -> (goal_state, total_cost, parent_map)` with periodic progress callbacks (iters, heap size).
     - Path reconstruction utility from `parent_map`.
   - Exposed via PyO3 functions/classes mirroring the current Python API.
-- Python module `mdp_solver` calls into the Rust functions, handles CSV/Sheets IO, and writes `moves.csv`/`final_state.csv`.
+- Python module `src/py` calls into the Rust functions, handles CSV/Sheets IO, and writes `moves.csv`/`final_state.csv`.
 
 ### Practical considerations
 

@@ -15,18 +15,18 @@ dependencies = [
 ]
 
 [project.scripts]
-hoi4-mdp-solve = "mdp_solver.__main__:main"
+hoi4-mdp-solve = "py.__main__:main"
 
 [tool.uv]
 dev-dependencies = []
 cache-keys = [
   { file = "pyproject.toml" },
-  { file = "rust/hoi4_mdp_core/Cargo.toml" },
-  { file = "rust/hoi4_mdp_core/**/*.rs" }
+  { file = "src/hoi4_mdp_core/Cargo.toml" },
+  { file = "src/hoi4_mdp_core/**/*.rs" }
 ]
 
 [tool.uv.sources]
-hoi4_mdp_core = { path = "rust/hoi4_mdp_core", editable = true }
+hoi4_mdp_core = { path = "src/hoi4_mdp_core", editable = true }
 
 
 

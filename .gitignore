@@ -1,5 +1,6 @@
 # Rust build artifacts
-rust/hoi4_mdp_core/target/
+target/
+src/*/target/
 
 # Python cache
 **/__pycache__/
