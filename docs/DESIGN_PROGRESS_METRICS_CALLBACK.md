@@ -68,7 +68,9 @@ pub struct SolveOptions {
 def solve_and_reconstruct(
     ..., *, prune: bool, heuristic: str, progress=None, print_every: int = 10_000
 ):
-    # if progress is not None: wrap into SolveOptions.progress; return True from callback to stop
+    # If progress is not None:
+    # - wrap into SolveOptions.progress;
+    # - return True from callback to stop
 ```
 
 - If `progress` is provided, disable internal printing; user decides verbosity.

@@ -100,8 +100,9 @@ repos:
         pass_filenames: false
 
   # Comprehensive Rust quality checks (CI-only)
-  # NOTE: Do NOT run `cargo check`/`cargo test` in pre-commit; this belongs in CI for speed and stability.
-  # See the CI "test" job below for how to run workspace checks and tests in GitHub Actions.
+  # NOTE: Do NOT run `cargo check`/`cargo test` in pre-commit; this belongs in
+  # CI for speed and stability. See the CI "test" job below for how to run
+  # workspace checks and tests in GitHub Actions.
 
   # Security checks
   - repo: https://github.com/Yelp/detect-secrets
@@ -180,12 +181,17 @@ rules:
   "MD040": false
 }
 Rationale for temporary rule relaxations:
-- MD013 (line length): Documentation lines can exceed 80/100 chars for readability of URLs and tables.
-- MD041 (first line should be h1): Some docs start with badges or front matter before the title.
-- MD033 (inline HTML): Occasionally needed for fine-grained formatting not expressible in pure Markdown.
-- MD040 (fenced code blocks should have a language): Some generic or mixed-language blocks are intentional.
+- MD013 (line length): Documentation lines can exceed 80/100 chars for
+  readability of URLs and tables.
+- MD041 (first line should be h1): Some docs start with badges or front
+  matter before the title.
+- MD033 (inline HTML): Occasionally needed for fine-grained formatting not
+  expressible in pure Markdown.
+- MD040 (fenced code blocks should have a language): Some generic or
+  mixed-language blocks are intentional.
 
-Keep the config as strict as feasible. Remove any disable above if the docs can comply without compromising clarity.
+Keep the config as strict as feasible. Remove any disable above if the
+docs can comply without compromising clarity.
 ```
 
 1. **`.secrets.baseline`** (for detect-secrets - generate with

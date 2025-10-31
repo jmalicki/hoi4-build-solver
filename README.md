@@ -54,8 +54,10 @@ Alternatively, read directly from a Google Sheet (uses CSV export of the active
 tab):
 
 ```bash
+SHEET_URL="https://docs.google.com/spreadsheets/d/..."
+
 hoi4-mdp-solve \
-  --sheet-url "https://docs.google.com/spreadsheets/d/.../edit?gid=1859149470#gid=1859149470" \
+  --sheet-url "$SHEET_URL" \
   --target 30 \
   --moves-out moves.csv \
   --final-out final_state.csv

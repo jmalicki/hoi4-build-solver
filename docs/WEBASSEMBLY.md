@@ -100,7 +100,8 @@ optional WebAssembly build without code duplication.
 1. Separate Web API from PyO3
 
 - Add a `wasm` feature flag and a sibling interface that exposes:
-  - `solve_and_reconstruct_js(nodes: JsValue, target_type: &str, target: i32, opts: SolveOpts) -> JsValue`
+  - `solve_and_reconstruct_js(nodes: JsValue, target_type: &str,
+    target: i32, opts: SolveOpts) -> JsValue`
   - Types encoded via `serde` + `wasm-bindgen` to/from `JsValue`
     (JSON-compatible).
 - Keep the PyO3 entry point intact for Python, gated behind
@@ -108,18 +109,20 @@ optional WebAssembly build without code duplication.
 
 1. JS-friendly data model
 
-- Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]` (array
-  of tuples) or an object array with named fields. Prefer an object array for
-  readability: `{ name, numSlots, numInfra, numCivilian, numMilitary }`.
+- Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]`
+  (array of tuples) or an object array with named fields. Prefer an object
+  array for readability: `{ name, numSlots, numInfra, numCivilian, numMilitary
+  }`.
 - Return:
-  `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ, mil } ], totalCost }`.
+  `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ, mil } ],
+  totalCost }`.
 
 1. Logging and progress
 
-- `println!` does not surface in browser console by default. Expose an optional
-  callback via `wasm_bindgen` (e.g., `set_logger(cb)`), or return periodic
-  progress via an async iterator pattern. Simpler: accept a boolean `verbose`
-  and periodically call a JS callback provided by the UI.
+- `println!` does not surface in browser console by default. Expose an
+  optional callback via `wasm_bindgen` (e.g., `set_logger(cb)`), or return
+  periodic progress via an async iterator pattern. Simpler: accept a
+  boolean `verbose` and periodically call a JS callback provided by the UI.
 
 1. Long-running compute
 
@@ -325,7 +328,8 @@ Refactor outline:
 - `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`,
   `SolveMetrics`
 - `core::solve`:
-  `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType, target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
+  `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType,
+  target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
 - `py_api`: converts Python tuples ↔ `Node`, calls `core`
 - `wasm_api`: converts JS objects ↔ `Node` via `serde_wasm_bindgen`, calls
   `core`

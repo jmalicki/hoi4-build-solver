@@ -33,21 +33,25 @@ pub struct State {
 struct ConstructionItem {
     node_index: usize,      // Which node this construction affects
     action_type: Action,    // "civilian", "military", "infra", "convert"
-    cost_remaining: f64,    // Base cost remaining (raw cost, before infra/factory allocation)
-                           // Examples: 7200 for military, 10800 for civilian, 4000 for convert, 6000 for infra
+    cost_remaining: f64,    // Base cost remaining (raw cost, before
+                            // infra/factory allocation). Examples:
+                            // 7200 (military), 10800 (civilian),
+                            // 4000 (convert), 6000 (infra)
 // Formula: effective_time = cost_remaining / (infra_multiplier * factories_allocated)
 }
 ```
 
-**Both factory allocation and infra multiplier are implicit**: When processing
-the queue:
+**Both factory allocation and infra multiplier are implicit**:
+When processing the queue:
 
-- **Factory allocation**: Computed in FIFO order (first item gets min(15,
-  remaining_factories), etc.)
-- **Infra multiplier**: Computed from current node infra level at the moment of
-  calculation
+- **Factory allocation**: Computed in FIFO order (first item gets
+  min(15, remaining_factories), etc.)
+- **Infra multiplier**: Computed from current node infra level at the
+  moment of calculation
 - **Effective completion time**:
-  $\text{effective\_time} = \dfrac{\text{cost\_remaining}}{\text{current\_infra\_mult} \times \text{factories\_allocated}}$
+  $\text{effective\_time} =
+  \dfrac{\text{cost\_remaining}}{\text{current\_infra\_mult}
+  \times\;\text{factories\_allocated}}$
 
 This makes both factors implicit:
 
@@ -55,7 +59,8 @@ This makes both factors implicit:
 - Infra multiplier changes when infra completes (use current level, no
   adjustment needed)
 - When advancing time by $\delta_t$:
-  $\text{cost\_remaining} \mathrel{-=} \delta_t \times \text{current\_infra\_mult} \times \text{factories\_allocated}$
+  $\text{cost\_remaining} \mathrel{-=} \delta_t \times
+  \text{current\_infra\_mult} \times\;\text{factories\_allocated}$
 - Items with `cost_remaining <= 0` are completed
 
 **Benefits**: No need to adjust `cost_remaining` when infra changes - we just
@@ -228,7 +233,8 @@ impl ConstructionQueue {
     fn new() -> Self;
 
     /// Add construction item to queue (if capacity allows)
-    /// Stores raw base_cost (7200 for military, etc.) - infra/factory allocation computed later
+    /// Stores raw base_cost (7200 for military, etc.) - infra/factory
+    /// allocation computed later
     fn try_add(&self, node_idx: usize, action: Action, base_cost: f64) -> Option<Self>;
 
     /// Allocate factories to queue items in FIFO order (computed on-demand)
@@ -236,11 +242,18 @@ impl ConstructionQueue {
     /// Returns Vec<(item_index, factories_allocated)>
     fn allocate_factories(&self, total_civilian: u32) -> Vec<(usize, u8)>;
 
-    /// Advance time to next completion, updating queue and returning completed items
-    /// Factory allocation and infra_multiplier are recomputed from current state (both implicit)
-    /// delta_t = min(cost_remaining / (infra_mult * factories_allocated)) across all items
+    /// Advance time to next completion, updating queue and returning
+    /// completed items
+    /// Factory allocation and infra_multiplier are recomputed from current
+    /// state (both implicit)
+    /// delta_t = min(cost_remaining / (infra_mult * factories_allocated))
+    /// across all items
     /// Maintains invariant: cost_remaining >= 0 for all items
-    fn advance_to_next_completion(&mut self, nodes: &[NodeState], node_descs: &[NodeDesc]) -> (f64, Vec<CompletedItem>);
+    fn advance_to_next_completion(
+        &mut self,
+        nodes: &[NodeState],
+        node_descs: &[NodeDesc],
+    ) -> (f64, Vec<CompletedItem>);
     // Returns (time_elapsed, completed_items)
 
     /// Check if factories are fully utilized
@@ -277,14 +290,21 @@ impl State {
 ### Successor Generation Implementation
 
 ```rust
-fn iter_successors(state: &State, nodes: &[NodeDesc]) -> impl Iterator<Item = Successor> {
+fn iter_successors(
+    state: &State,
+    nodes: &[NodeDesc],
+) -> impl Iterator<Item = Successor> {
     // Phase 1: Generate states with new construction items added
     let base_successors = generate_construction_items(state, nodes);
 
     // Phase 2: For each, conditionally advance time
     base_successors.flat_map(move |mut succ| {
         let total_civ = succ.next_state.total_civilian();
-        if succ.next_state.construction_queue().factories_fully_utilized(total_civ) {
+        if succ
+            .next_state
+            .construction_queue()
+            .factories_fully_utilized(total_civ)
+        {
             let mut new_state = succ.next_state;
             let (delta_t, completed_items) = new_state.construction_queue_mut()
                 .advance_to_next_completion(&new_state.nodes, nodes);

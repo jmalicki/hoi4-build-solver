@@ -158,7 +158,8 @@ will take the initial list of nodes and their values, and produce:
 - Packaging: Rust crate compiled as a Python extension module via maturin/uv
   integration.
 - API surface (Python):
-  - `solve_a_star(nodes: List[Node], target: int, verbose: bool, print_every: int) -> (goal_state, total_cost, parent)`
+  - `solve_a_star(nodes: List[Node], target: int, verbose: bool,
+    print_every: int) -> (goal_state, total_cost, parent)`
   - `reconstruct_moves(parent, goal_state, nodes) -> List[(nodeName, actionStr)]`
 - Progress: optional callback hook `on_progress(iters, g, steps, heap_len)` from
   Rust; default prints match current Python output.
