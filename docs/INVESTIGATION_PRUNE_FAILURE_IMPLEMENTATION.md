@@ -19,15 +19,19 @@ investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is
 
 - [ ] Create test file: `src/hoi4_build_core/src/heuristic/invariants.rs` (optional module for debug checks)
 - [ ] Add debug assertion in `lower_bound()`:
+
   ```rust
   #[cfg(debug_assertions)]
   debug_assert!(lb >= 0.0, "lower_bound must be non-negative");
   ```
+
 - [ ] Add debug assertion in `upper_bound()`:
+
   ```rust
   #[cfg(debug_assertions)]
   debug_assert!(ub >= 0.0, "upper_bound must be non-negative");
   ```
+
 - [ ] Add assertion that `lower_bound <= upper_bound` in test helper
 - [ ] Run `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib` to verify no regressions
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
@@ -38,6 +42,7 @@ investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is
 
 - [ ] Add debug-only field `prev_best_ub: Option<f64>` to track `best_ub` history
 - [ ] In `solve_and_reconstruct_core`, after each `best_ub` update (lines 94, 110), add:
+
   ```rust
   #[cfg(debug_assertions)]
   if let Some(prev) = prev_best_ub {
@@ -45,21 +50,26 @@ investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is
   }
   prev_best_ub = Some(best_ub);
   ```
-- [ ] Run
-      `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_does_not_expand_more_than_no_prune_and_cost_matches -- --nocapture`
-      and observe behavior
+
+- [ ] Run:
+  ```bash
+  cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_does_not_expand_more_than_no_prune_and_cost_matches -- --nocapture
+  ```
+  and observe behavior
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
 - [ ] Run `pre-commit run --all-files` and fix any issues
 
 ### 1.3 Add Test for Invariant Checking
 
 - [ ] Create test in `src/hoi4_build_core/src/core/mod.rs`:
+
   ```rust
   #[test]
   fn test_heuristic_bounds_invariants() {
       // Test that bounds satisfy basic invariants
   }
   ```
+
 - [ ] Verify `lower_bound >= 0` for various states
 - [ ] Verify `upper_bound >= 0` for various states
 - [ ] Verify `lower_bound <= upper_bound` for various states
@@ -76,7 +86,7 @@ investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is
 
 **Conventional Commit Format**:
 
-```
+```text
 feat: add debug assertions for heuristic and pruning invariants
 
 Add runtime invariant checks to detect violations early:
@@ -102,6 +112,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 - [ ] Create file: `src/hoi4_build_core/src/core/exact_solver.rs`
 - [ ] Define function signature:
+
   ```rust
   pub fn exact_optimal_cost(
       desc: &[NodeDesc],
@@ -110,6 +121,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
       target: i32,
   ) -> Option<f64>
   ```
+
 - [ ] Implement BFS with state memoization
 - [ ] Add bounds checking: only solve if `desc.len() <= 2`, `max(slots) <= 3`, `target <= 2`, total states < 10,000
 - [ ] Return `None` if instance is too large
@@ -133,6 +145,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 ### 2.3 Add Property Test for Upper Bound Admissibility
 
 - [ ] Create property test in `src/hoi4_build_core/src/core/mod.rs`:
+
   ```rust
   #[test]
   fn prop_upper_bound_admissible_on_small_instances() {
@@ -141,6 +154,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
       // Assert: upper_bound >= exact_optimal_cost
   }
   ```
+
 - [ ] Use proptest to generate valid small instances
 - [ ] Filter to instances where exact solver can run (check bounds)
 - [ ] Assert admissibility: `prop_assert!(ub >= exact_opt || exact_opt.is_infinite())`
@@ -152,6 +166,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 ### 2.4 Add Property Test for Lower Bound Admissibility
 
 - [ ] Create property test:
+
   ```rust
   #[test]
   fn prop_lower_bound_admissible_on_small_instances() {
@@ -159,6 +174,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
       // Assert: lower_bound <= exact_optimal_cost
   }
   ```
+
 - [ ] Run tests and verify
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
 - [ ] Run `pre-commit run --all-files` and fix any issues
@@ -173,7 +189,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 **Conventional Commit Format**:
 
-```
+```text
 feat: add exact solver for tiny instances and admissibility tests
 
 Implement exhaustive BFS solver for very small instances (≤2 nodes,
@@ -201,6 +217,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 - [ ] Extract test setup code from `prune_does_not_expand_more_than_no_prune_and_cost_matches`
 - [ ] Create property test function:
+
   ```rust
   #[test]
   fn prop_prune_preserves_optimality() {
@@ -209,6 +226,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
       // Assert costs match and prune expands <= nodes
   }
   ```
+
 - [ ] Use proptest to generate valid small instances
 - [ ] Filter instances where solver can run in reasonable time
 - [ ] Add tolerance for floating-point comparison (use 1e-9)
@@ -237,7 +255,11 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 - [ ] Add detailed logging at each pruning decision
 - [ ] Output `best_ub` history, pruned states, and final costs
 - [ ] Run test and save output to file:
-      `cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_diagnostic -- --nocapture > prune_diagnostic_output.txt 2>&1`
+
+  ```bash
+  cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_diagnostic -- --nocapture > prune_diagnostic_output.txt 2>&1
+  ```
+
 - [ ] Analyze output to identify root cause
 - [ ] Document findings in test file or separate markdown file
 
@@ -251,7 +273,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 **Conventional Commit Format**:
 
-```
+```text
 feat: add property test for pruning optimality and diagnostic logging
 
 Generalize the pruning optimality test to run on many random instances
@@ -322,7 +344,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 **Conventional Commit Format**:
 
-```
+```text
 docs: analyze and document pruning optimality failure root cause
 
 Document findings from exact solver and diagnostic logging analysis.
@@ -370,7 +392,7 @@ Part of investigating why prune_does_not_expand_more_than_no_prune_and_cost_matc
 
 **Conventional Commit Format** (example):
 
-```
+```text
 fix: ensure upper bound heuristic is admissible
 
 [Detailed description of the fix, what was wrong, and how it's fixed]
@@ -410,13 +432,13 @@ Closes #[issue-number] (if applicable)
 
 **PR Title** (Conventional Commits format):
 
-```
+```text
 fix: investigate and fix pruning optimality failure
 ```
 
 OR (if no fix yet):
 
-```
+```text
 investigate: add tooling to diagnose pruning optimality failure
 ```
 
@@ -560,7 +582,7 @@ Body explaining what and why."
 
 ### Conventional Commits Format
 
-```
+```text
 <type>(<scope>): <subject>
 
 <body>
