@@ -49,12 +49,12 @@ pub struct SolveOptions {
 }
 ```
 
-2. Core entry points accept `SolveOptions` and invoke the callback when:
+1. Core entry points accept `SolveOptions` and invoke the callback when:
 
 - `iterations == 1` or `iterations % cadence == 0`
 - Final summary (last snapshot) before returning
 
-3. The callback is not called from within tight inner loops repeatedly; only at
+1. The callback is not called from within tight inner loops repeatedly; only at
    cadence boundaries to minimize overhead.
 
 ## Python Front-end (PyO3)

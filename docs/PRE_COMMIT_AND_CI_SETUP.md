@@ -169,7 +169,7 @@ rules:
   header-max-length: [2, always, 100]
 ```
 
-2. **`.markdownlint.json`** (optional - if you want custom markdownlint rules):
+1. **`.markdownlint.json`** (optional - if you want custom markdownlint rules):
 
 ```json
 {
@@ -188,7 +188,7 @@ Rationale for temporary rule relaxations:
 Keep the config as strict as feasible. Remove any disable above if the docs can comply without compromising clarity.
 ```
 
-3. **`.secrets.baseline`** (for detect-secrets - generate with
+1. **`.secrets.baseline`** (for detect-secrets - generate with
    `detect-secrets scan --baseline .secrets.baseline`)
 
 ### Installation Instructions
@@ -574,8 +574,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
-````
-````
+
 
 **Update `pyproject.toml`** to reference the license:
 

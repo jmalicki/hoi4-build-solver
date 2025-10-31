@@ -95,7 +95,7 @@ optional WebAssembly build without code duplication.
 - Keep the PyO3 entry point intact for Python, gated behind
   `cfg(feature = "pyo3")`.
 
-2. JS-friendly data model
+1. JS-friendly data model
 
 - Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]` (array
   of tuples) or an object array with named fields. Prefer an object array for
@@ -103,21 +103,21 @@ optional WebAssembly build without code duplication.
 - Return:
   `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ, mil } ], totalCost }`.
 
-3. Logging and progress
+1. Logging and progress
 
 - `println!` does not surface in browser console by default. Expose an optional
   callback via `wasm_bindgen` (e.g., `set_logger(cb)`), or return periodic
   progress via an async iterator pattern. Simpler: accept a boolean `verbose`
   and periodically call a JS callback provided by the UI.
 
-4. Long-running compute
+1. Long-running compute
 
 - Run the solver in a **Web Worker** (or dedicated Worker in Vite/React) to
   avoid freezing the main thread.
 - Provide a cancel mechanism (e.g., set an atomic flag exposed to Rust via
   `wasm-bindgen` or cooperative checks).
 
-5. CSV and Google Sheets input
+1. CSV and Google Sheets input
 
 - CSV: Use JS libraries (e.g., Papaparse) to parse CSV in-browser. Transform to
   the node array for WASM.

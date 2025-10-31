@@ -129,7 +129,7 @@ After adding a construction item, check factory allocation:
     automatically use the new infra_multiplier - no adjustment needed
   - Remove completed items from queue
 
-4. **If factories are under-utilized** (remaining_factories > 0 after
+1. **If factories are under-utilized** (remaining_factories > 0 after
    allocation):
    - Do not advance time
    - Enqueue this successor state as-is
