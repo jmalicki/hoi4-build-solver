@@ -4,8 +4,10 @@
 //! Heuristics provide both admissible lower bounds (for A*) and upper bounds (for pruning).
 
 mod best_infra_upper_bound;
+mod zero;
 
 pub use best_infra_upper_bound::BestInfraUpperBoundHeuristic;
+pub use zero::ZeroHeuristic;
 
 use crate::{NodeDesc, State, TargetType};
 
@@ -49,6 +51,11 @@ pub trait Heuristic: Send + Sync {
 pub fn create_by_name(name: &str) -> Result<Box<dyn Heuristic>, String> {
     match name {
         "best_infra_upper_bound" | "standard" => Ok(Box::new(BestInfraUpperBoundHeuristic)),
-        _ => Err(format!("Unknown heuristic: {}. Available: best_infra_upper_bound (alias: standard)", name)),
+        // zero heuristic for Dijkstra's algorithm; accept both spellings
+        "djikstra" | "dijkstra" | "zero" => Ok(Box::new(ZeroHeuristic)),
+        _ => Err(format!(
+            "Unknown heuristic: {}. Available: best_infra_upper_bound (alias: standard), djikstra (alias: dijkstra, zero)",
+            name
+        )),
     }
 }

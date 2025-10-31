@@ -119,6 +119,14 @@ The upper bound uses a greedy "convert then build" strategy:
 
 **Use for pruning**: If `g(s) + ub(s) > best_known_solution_cost`, we can safely prune state `s` (no optimal path goes through it).
 
+### `ZeroHeuristic` (string name: `djikstra`)
+
+- `lower_bound(s) = 0` for all states `s` (admissible but weakest possible)
+- `upper_bound(s) = +∞` (disables pruning)
+- Reduces A* to classic Dijkstra's algorithm (uniform-cost search)
+
+Use when you want correctness without any heuristic guidance, e.g., to debug heuristic behavior or as a baseline.
+
 ## Future Heuristics
 
 Future implementations might include:
