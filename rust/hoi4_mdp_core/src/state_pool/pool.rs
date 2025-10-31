@@ -132,6 +132,25 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
 
     pub fn heap_push(&mut self, handle: &StateHandle<S, T>, f: f64) {
         let idx = handle.index();
+        // Guard: grow heap bound before inserting an index beyond current bound
+        if idx >= self.heap_bound {
+            while self.heap_bound <= idx {
+                let _ = grow_heap_if_needed(&mut self.open, idx + 1, &mut self.heap_bound);
+            }
+            // Rebuild accounting based on current heap content
+            self.in_open.clear();
+            self.heap_sum_f = 0.0;
+            self.heap_len = 0;
+            let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
+            while let Some((i, neg)) = self.open.pop() { tmp.push((i, neg)); }
+            for (i, neg) in tmp.into_iter() {
+                self.open.push(i, neg);
+                self.in_open.insert(i);
+                let f_i = -neg;
+                if f_i.is_finite() { self.heap_sum_f += f_i; }
+                self.heap_len += 1;
+            }
+        }
         self.increment_ref_count(idx);
         self.open.push(idx, -f);
         self.in_open.insert(idx);
@@ -173,6 +192,25 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             let state_idx = state_idx_nm.get();
             let parent_idx = parent.map(|p| p.index());
             self.set_parent_component_and_transition(state_idx, parent_idx, component_idx, transition_info);
+            // Ensure heap can accommodate this index BEFORE pushing/decreasing
+            if state_idx >= self.heap_bound {
+                while self.heap_bound <= state_idx {
+                    let _ = grow_heap_if_needed(&mut self.open, state_idx + 1, &mut self.heap_bound);
+                }
+                // Rebuild accounting structures after growth
+                self.in_open.clear();
+                self.heap_sum_f = 0.0;
+                self.heap_len = 0;
+                let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
+                while let Some((idx, neg_f)) = self.open.pop() { tmp.push((idx, neg_f)); }
+                for (idx, neg_f) in tmp.into_iter() {
+                    self.open.push(idx, neg_f);
+                    self.in_open.insert(idx);
+                    let f = -neg_f;
+                    if f.is_finite() { self.heap_sum_f += f; }
+                    self.heap_len += 1;
+                }
+            }
             if self.is_in_heap(state_idx) { self.heap_decrease_key(state_idx, f); } else {
                 let handle = StateHandle::new(state_idx, f, self);
                 self.heap_push(&handle, f);
@@ -272,6 +310,22 @@ mod tests {
         assert!(popped.is_some());
         let ph = popped.unwrap();
         assert_eq!(pool.parent_idx(ph.index()), None); // Start state has no parent
+    }
+
+    #[test]
+    fn heap_push_grows_before_inserting_high_index() {
+        // Requirement: pushing a handle with index >= bound must not panic; heap grows first
+        let mut pool: StatePool<TestState, TestTransition> = StatePool::new(8);
+        // Simulate many inserted states to create a high index handle
+        let mut last_idx = 0usize;
+        for i in 0..1024 {
+            last_idx = pool.insert_state(TestState(i));
+        }
+        assert!(last_idx >= 1023);
+        let h = pool.make_handle(last_idx, 1.0);
+        // This would OOB if we didn't grow inside heap_push
+        pool.heap_push(&h, 1.0);
+        assert!(pool.heap_size() >= 1);
     }
 }
 

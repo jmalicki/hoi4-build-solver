@@ -180,11 +180,22 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
 
     if verbose:
         print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}, heuristic={heuristic_name}", flush=True)
-    moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
-        rust_nodes, target_type_lower, int(target_value),
-        print_every=print_every, prune=not no_prune, heuristic=heuristic_name,
-        progress_callback=_progress_cb if verbose else None,
-    )
+    try:
+        # New signature (preferred): nodes, target_type, target, *, print_every, prune, heuristic, progress_callback
+        # Pass required args positionally to accommodate environments that reject target_type as a keyword
+        moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
+            rust_nodes, target_type_lower, int(target_value),
+            print_every=print_every, prune=not no_prune, heuristic=heuristic_name,
+            progress_callback=_progress_cb if verbose else None,
+        )
+    except TypeError:
+        # Legacy signature fallback: (nodes, target_military, *, verbose, print_every, re_prune)
+        # Use military target; disable pruning if --no-prune; progress callback not supported in legacy.
+        if target_type_lower != "military":
+            raise click.UsageError("Installed core uses legacy signature (military-only). Run with --target-type military or rebuild core.")
+        moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
+            rust_nodes, int(target_value), verbose=verbose, print_every=print_every, re_prune=not no_prune,
+        )
     goal_state = tuple((int(i), int(c), int(m)) for (i, c, m) in final_state_vec)
 
     # Write moves CSV
