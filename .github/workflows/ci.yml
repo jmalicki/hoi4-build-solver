@@ -195,4 +195,3 @@ jobs:
           name: rust-docs
           path: src/hoi4_build_core/target/doc
           retention-days: 30
-
