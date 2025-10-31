@@ -2,6 +2,8 @@ use crate::heuristic::create_by_name;
 use crate::state_pool::{StateHandle, StatePool};
 use crate::{NodeDesc, State, TargetType, is_terminal};
 
+pub mod exact_solver;
+
 #[derive(Clone)]
 pub struct ProgressSnapshot {
     pub iterations: usize,
@@ -37,6 +39,8 @@ where
     let h0 = heuristic_impl.lower_bound(&start, &desc, target_type, target);
     pool.enqueue_or_update_state(start.clone(), 0.0, None, 0, None, h0);
     let mut best_ub = heuristic_impl.upper_bound(&start, &desc, target_type, target);
+    #[cfg(debug_assertions)]
+    let mut prev_best_ub: Option<f64> = None;
     let mut expanded: usize = 0;
     let mut goal_i: Option<StateHandle<State, super::TransitionInfo>> = None;
     let mut goal_g: f64 = 0.0;
@@ -91,7 +95,26 @@ where
             let ub_suffix = heuristic_impl.upper_bound(&cur_state, &desc, target_type, target);
             let candidate_total = cur_cost + ub_suffix;
             if candidate_total <= best_ub {
+                let old_best_ub = best_ub;
                 best_ub = candidate_total;
+                #[cfg(debug_assertions)]
+                {
+                    if let Some(prev) = prev_best_ub {
+                        debug_assert!(
+                            best_ub <= prev,
+                            "best_ub must never increase (was {}, now {})",
+                            prev,
+                            best_ub
+                        );
+                    }
+                    debug_assert!(
+                        best_ub <= old_best_ub,
+                        "best_ub must never increase (was {}, now {})",
+                        old_best_ub,
+                        best_ub
+                    );
+                    prev_best_ub = Some(best_ub);
+                }
             } else {
                 continue;
             }
@@ -107,7 +130,26 @@ where
                     pruned += 1;
                     continue;
                 } else {
+                    let old_best_ub = best_ub;
                     best_ub = cost_value + ub_ns;
+                    #[cfg(debug_assertions)]
+                    {
+                        if let Some(prev) = prev_best_ub {
+                            debug_assert!(
+                                best_ub <= prev,
+                                "best_ub must never increase (was {}, now {})",
+                                prev,
+                                best_ub
+                            );
+                        }
+                        debug_assert!(
+                            best_ub <= old_best_ub,
+                            "best_ub must never increase (was {}, now {})",
+                            old_best_ub,
+                            best_ub
+                        );
+                        prev_best_ub = Some(best_ub);
+                    }
                 }
             }
             pool.enqueue_or_update_state(
@@ -219,6 +261,66 @@ mod tests {
     }
 
     #[test]
+    fn test_heuristic_bounds_invariants() {
+        // Test that bounds satisfy basic invariants: non-negativity and ordering
+        use crate::heuristic::create_by_name;
+        let h = create_by_name("best_infra_upper_bound").unwrap();
+        let desc = make_desc();
+        let start = make_start();
+
+        // Test non-negativity
+        let lb = h.lower_bound(&start, &desc, crate::TargetType::Military, 2);
+        let ub = h.upper_bound(&start, &desc, crate::TargetType::Military, 2);
+        assert!(lb >= 0.0, "lower_bound must be non-negative, got {}", lb);
+        assert!(
+            ub >= 0.0 || ub == f64::INFINITY,
+            "upper_bound must be non-negative or infinity, got {}",
+            ub
+        );
+
+        // Test ordering: lower_bound <= upper_bound
+        if ub != f64::INFINITY {
+            assert!(
+                lb <= ub + 1e-9,
+                "lower_bound must be <= upper_bound, got lb={}, ub={}",
+                lb,
+                ub
+            );
+        }
+
+        // Test on different target types
+        for &target_type in &[
+            crate::TargetType::Military,
+            crate::TargetType::Civilian,
+            crate::TargetType::Factories,
+        ] {
+            let lb = h.lower_bound(&start, &desc, target_type, 2);
+            let ub = h.upper_bound(&start, &desc, target_type, 2);
+            assert!(
+                lb >= 0.0,
+                "lower_bound must be non-negative for {:?}, got {}",
+                target_type,
+                lb
+            );
+            assert!(
+                ub >= 0.0 || ub == f64::INFINITY,
+                "upper_bound must be non-negative or infinity for {:?}, got {}",
+                target_type,
+                ub
+            );
+            if ub != f64::INFINITY {
+                assert!(
+                    lb <= ub + 1e-9,
+                    "lower_bound must be <= upper_bound for {:?}, got lb={}, ub={}",
+                    target_type,
+                    lb,
+                    ub
+                );
+            }
+        }
+    }
+
+    #[test]
     fn heuristic_is_consistent_on_sample_successors() {
         let desc = make_desc();
         let start = make_start();
@@ -283,5 +385,102 @@ mod tests {
                 }
             }
         }
+
+    }
+
+    #[test]
+    fn prop_upper_bound_admissible_on_small_instances() {
+        // Property test: For small instances where exact solver can run,
+        // verify that upper_bound >= exact_optimal_cost (admissibility)
+        use crate::core::exact_solver::exact_optimal_cost;
+
+        let h = create_by_name("best_infra_upper_bound").unwrap();
+
+        // Generate small instances (≤2 nodes, ≤3 slots, ≤2 target)
+        let desc_strategy = prop::collection::vec(Just(NodeDesc { slots: 3 }), 1..=2);
+        let target_strategy = 0i32..=2;
+        let target_type_strategy = prop::sample::select(&[
+            crate::TargetType::Military,
+            crate::TargetType::Civilian,
+            crate::TargetType::Factories,
+        ]);
+
+        proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
+            // Generate valid start state (small slots, low values)
+            let start = State(desc.iter().map(|d| crate::NodeState {
+                infra: 0u8,
+                civ: 0u8.min(d.slots),
+                mil: 0u8,
+            }).collect());
+
+            // Compute upper bound and exact optimal
+            let ub = h.upper_bound(&start, &desc, target_type, target);
+            let exact_opt = exact_optimal_cost(&desc, &start, target_type, target);
+
+            if let Some(exact) = exact_opt {
+                // If exact solver found a solution, upper bound must be >= exact optimal
+                prop_assert!(
+                    ub >= exact || ub == f64::INFINITY,
+                    "Upper bound must be >= exact optimal: ub={}, exact={}",
+                    ub,
+                    exact
+                );
+            } else {
+                // If exact solver returned None, upper bound should be non-negative
+                prop_assert!(
+                    ub >= 0.0 || ub == f64::INFINITY,
+                    "Upper bound must be non-negative or infinity: ub={}",
+                    ub
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn prop_lower_bound_admissible_on_small_instances() {
+        // Property test: For small instances where exact solver can run,
+        // verify that lower_bound <= exact_optimal_cost (admissibility)
+        use crate::core::exact_solver::exact_optimal_cost;
+
+        let h = create_by_name("best_infra_upper_bound").unwrap();
+
+        // Generate small instances (≤2 nodes, ≤3 slots, ≤2 target)
+        let desc_strategy = prop::collection::vec(Just(NodeDesc { slots: 3 }), 1..=2);
+        let target_strategy = 0i32..=2;
+        let target_type_strategy = prop::sample::select(&[
+            crate::TargetType::Military,
+            crate::TargetType::Civilian,
+            crate::TargetType::Factories,
+        ]);
+
+        proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
+            // Generate valid start state (small slots, low values)
+            let start = State(desc.iter().map(|d| crate::NodeState {
+                infra: 0u8,
+                civ: 0u8.min(d.slots),
+                mil: 0u8,
+            }).collect());
+
+            // Compute lower bound and exact optimal
+            let lb = h.lower_bound(&start, &desc, target_type, target);
+            let exact_opt = exact_optimal_cost(&desc, &start, target_type, target);
+
+            if let Some(exact) = exact_opt {
+                // If exact solver found a solution, lower bound must be <= exact optimal
+                prop_assert!(
+                    lb <= exact + 1e-9,
+                    "Lower bound must be <= exact optimal: lb={}, exact={}",
+                    lb,
+                    exact
+                );
+            } else {
+                // If exact solver returned None, lower bound should still be non-negative
+                prop_assert!(
+                    lb >= 0.0,
+                    "Lower bound must be non-negative: lb={}",
+                    lb
+                );
+            }
+        });
     }
 }

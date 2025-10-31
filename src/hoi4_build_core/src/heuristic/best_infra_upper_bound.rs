@@ -52,6 +52,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         };
 
         if remaining == 0 {
+            #[cfg(debug_assertions)]
+            debug_assert!(0.0 >= 0.0, "lower_bound must be non-negative");
             return 0.0;
         }
 
@@ -70,19 +72,28 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                 let conv_usable = remaining.min(sum_civ);
                 let mil_needed = remaining - conv_usable;
                 let blended_base = (4000.0 * (conv_usable as f64)) + (7200.0 * (mil_needed as f64));
-                blended_base / best_mult / civ_upper
+                let lb = blended_base / best_mult / civ_upper;
+                #[cfg(debug_assertions)]
+                debug_assert!(lb >= 0.0, "lower_bound must be non-negative, got {}", lb);
+                lb
             }
             TargetType::Civilian => {
                 // For civilian factories, we can only build (not convert).
                 // Base cost is 10800 for civilian factories.
                 let blended_base = 10800.0 * (remaining as f64);
-                blended_base / best_mult / civ_upper
+                let lb = blended_base / best_mult / civ_upper;
+                #[cfg(debug_assertions)]
+                debug_assert!(lb >= 0.0, "lower_bound must be non-negative, got {}", lb);
+                lb
             }
             TargetType::Factories => {
                 // For total factories, conversions don't change the count, so we must build new factories.
                 // Build the cheapest type (military is cheaper than civilian).
                 let blended_base = 7200.0 * (remaining as f64); // Use military cost (cheapest)
-                blended_base / best_mult / civ_upper
+                let lb = blended_base / best_mult / civ_upper;
+                #[cfg(debug_assertions)]
+                debug_assert!(lb >= 0.0, "lower_bound must be non-negative, got {}", lb);
+                lb
             }
         }
     }
@@ -130,6 +141,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         };
 
         if need == 0 {
+            #[cfg(debug_assertions)]
+            debug_assert!(0.0 >= 0.0, "upper_bound must be non-negative");
             return 0.0;
         }
 
@@ -163,6 +176,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                 }
 
                 if need == 0 {
+                    #[cfg(debug_assertions)]
+                    debug_assert!(ub >= 0.0, "upper_bound must be non-negative, got {}", ub);
                     return ub;
                 }
 
@@ -178,7 +193,14 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                     ub += (take as f64) * (build_num / post_civ_den);
                     need -= take;
                 }
-                if need > 0 { f64::INFINITY } else { ub }
+                let result = if need > 0 { f64::INFINITY } else { ub };
+                #[cfg(debug_assertions)]
+                debug_assert!(
+                    result >= 0.0 || result == f64::INFINITY,
+                    "upper_bound must be non-negative or infinity, got {}",
+                    result
+                );
+                result
             }
             TargetType::Civilian => {
                 // Build civilian factories only
@@ -195,7 +217,14 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                     ub += (take as f64) * (build_num / civ_den);
                     need -= take;
                 }
-                if need > 0 { f64::INFINITY } else { ub }
+                let result = if need > 0 { f64::INFINITY } else { ub };
+                #[cfg(debug_assertions)]
+                debug_assert!(
+                    result >= 0.0 || result == f64::INFINITY,
+                    "upper_bound must be non-negative or infinity, got {}",
+                    result
+                );
+                result
             }
             TargetType::Factories => {
                 // For total factories, conversions don't change the count, so we can't use conversions
@@ -215,7 +244,14 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                     ub += (take as f64) * (build_num / civ_den);
                     need -= take;
                 }
-                if need > 0 { f64::INFINITY } else { ub }
+                let result = if need > 0 { f64::INFINITY } else { ub };
+                #[cfg(debug_assertions)]
+                debug_assert!(
+                    result >= 0.0 || result == f64::INFINITY,
+                    "upper_bound must be non-negative or infinity, got {}",
+                    result
+                );
+                result
             }
         }
     }
