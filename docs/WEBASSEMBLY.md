@@ -193,4 +193,25 @@ The web app can include a benchmarking mode to compare search performance across
 
 Converting the solver to a browser-based, no-backend web app is practical. The main work is exposing a WASM-friendly API and building a small UI. We retain the Python CLI for local workflows and add a WebAssembly target for interactive, shareable demos and distribution.
 
+## Moving Shareable Logic into Rust Core
+
+While Python and Web are separate front-ends, we should centralize shared logic in Rust so both consume the same behavior:
+
+- Input validation and feasibility checks (ranges, capacity)
+- Target-type parsing and error messages
+- Heuristic selection mapping from string → trait object
+- Progress/metrics collection (expanded, pruned, heap stats)
+- Path/moves reconstruction and final-state formatting
+- Pruning policy toggles and defaults
+
+Optional to migrate (keep thin wrappers in front-ends):
+- CSV/Sheets parsing (browser/Python have native libs; keep parsing front-end specific)
+- Dock/Refinery preprocessing: front-ends can normalize columns, but a small Rust helper can also accept `{ name, numSlots, numInfra, numCivilian, numMilitary }` and compute effective slots given optional fields
+
+Refactor outline:
+- `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`, `SolveMetrics`
+- `core::solve`: `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType, target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
+- `py_api`: converts Python tuples ↔ `Node`, calls `core`
+- `wasm_api`: converts JS objects ↔ `Node` via `serde_wasm_bindgen`, calls `core`
+
 
