@@ -130,7 +130,6 @@ Use when you want correctness without any heuristic guidance, e.g., to debug heu
 ## Future Heuristics
 
 Future implementations might include:
-- **Zero heuristic**: Always returns 0 (Dijkstra's algorithm - admissible but weak)
 - **Greedy heuristic**: Optimistic estimate based on cheapest single action
 - **Relaxed heuristic**: Uses relaxed problem constraints (e.g., ignore infra costs)
 - **Learning heuristic**: Uses learned cost estimates from previous runs
