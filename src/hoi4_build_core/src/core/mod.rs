@@ -237,6 +237,7 @@ mod tests {
 
     // Property-based tests using proptest
     use proptest::prelude::*;
+    use proptest::strategy::Union;
 
     fn arb_desc() -> impl Strategy<Value = Vec<NodeDesc>> {
         prop::collection::vec(1u8..=5u8, 1..=4)
