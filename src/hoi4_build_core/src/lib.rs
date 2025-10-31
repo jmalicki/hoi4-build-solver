@@ -31,7 +31,7 @@ pub(crate) struct NodeDesc {
 /// - infra: infrastructure level in [0,5]
 /// - civ: number of civilian factories (>= 0)
 /// - mil: number of military factories (>= 0)
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub(crate) struct NodeState {
     pub(crate) infra: u8, // 0..=5
     pub(crate) civ: u8,   // 0..=255 (see docs)
