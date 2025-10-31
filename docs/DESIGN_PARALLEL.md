@@ -118,6 +118,7 @@ fn iter_successors(state: &State, nodes: &[NodeDesc]) -> impl Iterator<Item = Su
 ```
 
 Each `Successor` contains:
+
 - `next_state: State` - the new state after adding a construction item (and possibly advancing time)
 - `time_increment: f64` - time that passed in this transition (0 if no advancement)
 - `action: Action` - the construction item that was added
@@ -126,10 +127,12 @@ Each `Successor` contains:
 ## Time vs Cost
 
 The existing "cost" formula is actually time:
+
 - `base_cost / (infra_multiplier * total_civilian)`
 - This represents time to complete given factory allocation
 
 For the construction queue:
+
 - `cost_remaining` = raw base cost (7200 for military, 10800 for civilian, etc.)
 - Both infra_multiplier and factories_allocated are computed from current state when needed
 - Effective completion time: `effective_time = cost_remaining / (infra_mult * factories_allocated)`
@@ -141,6 +144,7 @@ For the construction queue:
 - **Infra changes are implicit**: When infra completes, future calculations for items on that node automatically use the new infra_multiplier
 
 **Example**: Two military factories in queue, both with cost_remaining=7200, infra_mult=1.0 (infra level 0):
+
 - Item 1: allocated 15 factories → `effective_time = 7200 / (1.0 * 15) = 480` days
 - Item 2: allocated 10 factories → `effective_time = 7200 / (1.0 * 10) = 720` days
 - `delta_t = min(480, 720) = 480` days
@@ -153,6 +157,7 @@ For the construction queue:
 ## State Pool Integration
 
 The state pool and A* search remain largely unchanged:
+
 - States are still hashed/compared by their content
 - The construction queue is part of state identity
 - `g` value is now cumulative time (not cost sum)
@@ -254,12 +259,14 @@ fn iter_successors(state: &State, nodes: &[NodeDesc]) -> impl Iterator<Item = Su
 ### Transition Cost
 
 The step cost for A* is the `time_increment` from the successor:
+
 - If no time advancement: `time_increment = 0.0` (decision state, no cost)
 - If time advancement: `time_increment = delta_t` (actual time elapsed)
 
 ## Output Format
 
 The `moves.csv` output format remains the same as before - each action represents adding a new item to the construction queue:
+
 - `(nodeName, "military")` - enqueue military factory construction
 - `(nodeName, "civilian")` - enqueue civilian factory construction
 - `(nodeName, "infra")` - enqueue infrastructure upgrade
@@ -270,6 +277,7 @@ The `moves.csv` output format remains the same as before - each action represent
 **Time advancement is implicit**: When factories are fully utilized and time advances to the next completion, these internal state transitions are not shown as separate moves. Only the enqueue actions appear.
 
 **Example**: The moves.csv looks identical to before:
+
 - `(A, "military")`
 - `(B, "military")`
 - `(C, "military")`
@@ -279,6 +287,7 @@ But internally, between each enqueue, time may advance automatically and items m
 ## Heuristic Updates
 
 The heuristic `h(s)` needs to account for the construction queue:
+
 - Items already in queue will complete in some time (given factory allocation)
 - Remaining work beyond the queue still uses the existing heuristic formula
 - Heuristic = `max(queue_completion_time, remaining_work_heuristic)`

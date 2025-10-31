@@ -152,6 +152,7 @@ pub fn create_by_name(name: &str) -> Result<Box<dyn Heuristic>, String> {
 ## Future Heuristics
 
 Potential future implementations:
+
 - `ZeroHeuristic`: Always returns 0 (Dijkstra's algorithm)
 - `GreedyHeuristic`: Optimistic estimate based on cheapest single action
 - `RelaxedHeuristic`: Uses relaxed problem constraints

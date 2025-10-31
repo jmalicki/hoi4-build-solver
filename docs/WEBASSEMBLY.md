@@ -71,23 +71,28 @@ This approach ensures the CLI remains the default experience while enabling an o
 
 
 1) Separate Web API from PyO3
+
 - Add a `wasm` feature flag and a sibling interface that exposes:
   - `solve_and_reconstruct_js(nodes: JsValue, target_type: &str, target: i32, opts: SolveOpts) -> JsValue`
   - Types encoded via `serde` + `wasm-bindgen` to/from `JsValue` (JSON-compatible).
 - Keep the PyO3 entry point intact for Python, gated behind `cfg(feature = "pyo3")`.
 
 2) JS-friendly data model
+
 - Nodes: `[ [name, numSlots, numInfra, numCivilian, numMilitary], ... ]` (array of tuples) or an object array with named fields. Prefer an object array for readability: `{ name, numSlots, numInfra, numCivilian, numMilitary }`.
 - Return: `{ moves: [ { nodeName, action } ], finalState: [ { infra, civ, mil } ], totalCost }`.
 
 3) Logging and progress
+
 - `println!` does not surface in browser console by default. Expose an optional callback via `wasm_bindgen` (e.g., `set_logger(cb)`), or return periodic progress via an async iterator pattern. Simpler: accept a boolean `verbose` and periodically call a JS callback provided by the UI.
 
 4) Long-running compute
+
 - Run the solver in a **Web Worker** (or dedicated Worker in Vite/React) to avoid freezing the main thread.
 - Provide a cancel mechanism (e.g., set an atomic flag exposed to Rust via `wasm-bindgen` or cooperative checks).
 
 5) CSV and Google Sheets input
+
 - CSV: Use JS libraries (e.g., Papaparse) to parse CSV in-browser. Transform to the node array for WASM.
 - Google Sheets: Use the sheet's CSV export URL directly with `fetch` in the browser. Preprocess columns (including subtracting `Docks`/`Refineries`) on the JS side, to match the Python preprocessor behavior.
 
@@ -98,6 +103,7 @@ This approach ensures the CLI remains the default experience while enabling an o
 - **TypeScript**: Define shared types that mirror the Rust `serde` structs.
 
 Typical steps:
+
 ```bash
 # In crate (rust/hoi4_mdp_core)
 wasm-pack build --release --target web --out-dir pkg -- --features wasm
@@ -223,21 +229,26 @@ After these refactors, revisit performance and UX: test large inputs in-browser,
 
 While Python and Web are separate front-ends, we should centralize only computational core logic in Rust so both consume the same behavior:
 
-so f- Heuristic selection mapping from string → trait object
+
+
+- Heuristic selection mapping from string → trait object
 - Progress/metrics collection (expanded, pruned, heap stats)
 - Path/moves reconstruction and final-state formatting
 - Pruning policy toggles and defaults
 
 Optional to migrate (keep thin wrappers in front-ends):
+
 - CSV/Sheets parsing (browser/Python have native libs; keep parsing front-end specific)
 - Dock/Refinery preprocessing: front-ends can normalize columns, but a small Rust helper can also accept `{ name, numSlots, numInfra, numCivilian, numMilitary }` and compute effective slots given optional fields
 
 Front-end responsibilities (Node CLI and Web UI):
+
 - Input validation and feasibility checks (ranges, capacity) close to UX
 - Target-type parsing, friendly errors, and localization
 - File/network I/O (CSV upload, Sheets fetch)
 
 Refactor outline:
+
 - `core::types`: `Node`, `TargetType`, `SolveOpts`, `SolveResult`, `SolveMetrics`
 - `core::solve`: `solve_and_reconstruct_core(nodes: Vec<Node>, target_type: TargetType, target: i32, opts: SolveOpts) -> (SolveResult, SolveMetrics)`
 - `py_api`: converts Python tuples ↔ `Node`, calls `core`
