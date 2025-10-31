@@ -8,6 +8,7 @@
 #![allow(
     clippy::all,
     unsafe_code,
+    unsafe_op_in_unsafe_fn,
     unused,
     missing_docs,
     clippy::missing_docs_in_private_items
