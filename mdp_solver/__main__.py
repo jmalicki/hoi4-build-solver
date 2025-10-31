@@ -107,9 +107,10 @@ def load_nodes_from_csv(path: str) -> List["Node"]:
 @click.option("--moves-out", "moves_out", required=True, type=click.Path(writable=True, dir_okay=False), help="Output CSV for moves")
 @click.option("--final-out", "final_out", required=True, type=click.Path(writable=True, dir_okay=False), help="Output CSV for final state")
 @click.option("--no-prune", "no_prune", is_flag=True, default=False, help="Disable pruning (default: pruning enabled)")
+@click.option("--verbose/--quiet", "verbose", default=True, show_default=True, help="Print periodic progress (controls progress callback)")
 @click.option("--print-every", "print_every", default=10000, show_default=True, type=int, help="Print progress every N iterations (0 to disable)")
 @click.option("--heuristic", "heuristic_name", default="best_infra_upper_bound", show_default=True, type=click.Choice(["best_infra_upper_bound", "standard", "djikstra", "dijkstra", "zero"], case_sensitive=False), help="Heuristic to use: best_infra_upper_bound (alias: standard) or djikstra (aliases: dijkstra, zero)")
-def main(input_path: str | None, sheet_url: str | None, target_type: str, target_value: int, moves_out: str, final_out: str, no_prune: bool, print_every: int, heuristic_name: str) -> None:
+def main(input_path: str | None, sheet_url: str | None, target_type: str, target_value: int, moves_out: str, final_out: str, no_prune: bool, verbose: bool, print_every: int, heuristic_name: str) -> None:
     if bool(input_path) == bool(sheet_url):
         raise click.UsageError("Provide exactly one of --input or --sheet-url")
     nodes = load_nodes_from_csv(input_path) if input_path else load_nodes_from_gsheet(sheet_url)  # type: ignore[arg-type]
@@ -177,11 +178,12 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
         print(f"[A*] iters={iters} cost={cost:.4f} heap={heap} states={states} avg_f={avg_f:.4f} pruned={pruned} ub: best_ub={ub:.4f}", flush=True)
         return False  # never stop from CLI unless extended
 
-    print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}, heuristic={heuristic_name}", flush=True)
+    if verbose:
+        print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}, heuristic={heuristic_name}", flush=True)
     moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
         rust_nodes, target_type_lower, int(target_value),
         print_every=print_every, prune=not no_prune, heuristic=heuristic_name,
-        progress_callback=_progress_cb,
+        progress_callback=_progress_cb if verbose else None,
     )
     goal_state = tuple((int(i), int(c), int(m)) for (i, c, m) in final_state_vec)
 
