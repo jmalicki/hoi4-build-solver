@@ -21,6 +21,7 @@ use std::io::{self, Write};
 
 mod heap_growth;
 mod heuristic;
+mod core;
 mod state_pool;
 use state_pool::{StatePool, StateHandle};
 use heuristic::{Heuristic, create_by_name};
@@ -66,7 +67,7 @@ pub(crate) enum TargetType {
 /// - Military: total military factories >= target
 /// - Civilian: total civilian factories >= target
 /// - Factories: total factories (military + civilian) >= target
-fn is_terminal(st: &State, target_type: TargetType, target: i32) -> bool {
+pub(crate) fn is_terminal(st: &State, target_type: TargetType, target: i32) -> bool {
     match target_type {
         TargetType::Military => {
             let mut sum = 0i32;
@@ -119,7 +120,7 @@ fn fmt_step(n: usize) -> String {
 /// Snapshot of solver progress, exposed to Python as a read-only class.
 #[pyclass]
 #[derive(Clone)]
-struct ProgressSnapshot {
+struct PyProgressSnapshot {
     #[pyo3(get)]
     iterations: usize,
     #[pyo3(get)]
@@ -155,7 +156,7 @@ struct Successor {
 ///
 /// This is stored in StatePool alongside generic information (parent_idx, component_idx).
 /// The pool handles all storage and retrieval - lib.rs doesn't need to manage it.
-struct TransitionInfo {
+pub(crate) struct TransitionInfo {
     /// Action label ("civilian", "military", "infra", "convert") - domain-specific
     action: &'static str,
     /// Step cost from parent to this state - domain-specific (could be generic, but stored here for convenience)
@@ -166,7 +167,7 @@ struct TransitionInfo {
 ///
 /// Yields `Successor` structs containing node_index, action, next_state, and step_cost.
 /// The per-step cost uses the pre-action total civilian count as denominator.
-fn iter_successors<'a>(
+pub(crate) fn iter_successors<'a>(
     st: &'a State,
     nodes: &'a [NodeDesc],
 ) -> impl Iterator<Item = Successor> + 'a {
@@ -315,189 +316,36 @@ fn solve_and_reconstruct(
         ));
     }
 
-    // Create heuristic by name
-    let heuristic_impl = create_by_name(&heuristic).map_err(|e| {
-        pyo3::exceptions::PyValueError::new_err(format!("Invalid heuristic: {}", e))
-    })?;
-
-    // State pool for managing states, reference counting, index reuse, and the heap
-    let initial_heap_bound = 10_000_000; // Start with 10M, will grow as needed
-    let mut pool = StatePool::<State, TransitionInfo>::new(initial_heap_bound);
-
-    // seed start state - enqueue normally (no parent)
-    let h0 = heuristic_impl.lower_bound(&st, &desc, target_type_enum, target);
-    pool.enqueue_or_update_state(st.clone(), 0.0, None, 0, None, h0);
-    // Global best known solution cost (upper bound). Initialize with greedy plan from start.
-    let mut best_ub = heuristic_impl.upper_bound(&st, &desc, target_type_enum, target);
-    let mut expanded: usize = 0;
-    let mut goal_i: Option<StateHandle<State, TransitionInfo>> = None;
-    let mut goal_g: f64 = 0.0;
-    let mut pruned: usize = 0;
-    let use_progress_cb = progress_callback.is_some();
-    // Helper to emit a progress snapshot via callback when provided
-    let mut maybe_emit_progress = |iters: usize, g: f64, pruned_c: usize, best_ub_val: f64| -> bool {
-        if !use_progress_cb { return false; }
-        if print_every == 0 { return false; }
-        if !(iters == 1 || iters.is_multiple_of(print_every)) { return false; }
-        let snap = ProgressSnapshot {
-            iterations: iters,
-            cost_from_start: g,
-            heap_size: pool.heap_size(),
-            total_states: pool.total_states(),
-            avg_f: pool.heap_avg_f(),
-            pruned: pruned_c,
-            best_upper_bound: best_ub_val,
-        };
-        if let Some(cb) = &progress_callback {
-            return Python::with_gil(|py| {
-                match cb.call1((snap,)) {
+    // Build core options and callback
+    let mut core_cb = progress_callback.map(|cb| {
+        move |snap: &core::ProgressSnapshot| -> bool {
+            let py_snap = PyProgressSnapshot {
+                iterations: snap.iterations,
+                cost_from_start: snap.cost_from_start,
+                heap_size: snap.heap_size,
+                total_states: snap.total_states,
+                avg_f: snap.avg_f,
+                pruned: snap.pruned,
+                best_upper_bound: snap.best_upper_bound,
+            };
+            Python::with_gil(|py| {
+                match cb.call1((py_snap,)) {
                     Ok(val) => val.extract::<bool>().unwrap_or(false),
                     Err(_) => false,
                 }
-            });
-        }
-        false
-    };
-    while let Some(cur_handle) = pool.heap_pop() {
-        // StateHandle guarantees the state is active - if we have a handle, it's valid.
-        // The handle already has a ref_count (created when popped from heap).
-        // When handle drops, it will automatically decrement ref_count.
-        expanded += 1;
-
-        let cur_cost = cur_handle.cost_from_start(&pool);
-        let cur = cur_handle.state(&pool).unwrap();
-        // Check terminal before any pruning
-        if is_terminal(cur, target_type_enum, target) {
-            goal_g = cur_cost;
-            // Store handle to keep goal state alive for path reconstruction
-            // Handle will keep ref_count > 0 until we drop it
-            goal_i = Some(cur_handle);
-            break;
-        }
-        if use_progress_cb {
-            let stop = maybe_emit_progress(expanded, cur_cost, pruned, best_ub);
-            if stop {
-                return Err(SearchStoppedError::new_err("Search stopped by progress callback"));
-            }
-        }
-        if prune {
-            // Anytime pruning: tighten UB opportunistically, then prune.
-            // We rerun this here in case we've observed a better upper bound since
-            // we first enqueued the state.
-            let ub_suffix = heuristic_impl.upper_bound(cur, &desc, target_type_enum, target);
-            let candidate_total = cur_cost + ub_suffix;
-            if candidate_total <= best_ub {
-                best_ub = candidate_total;
-            } else {
-                continue;
-            }
-        }
-        let successors = iter_successors(cur, &desc).collect::<Vec<_>>();
-        for successor in successors {
-            let cost_value = cur_cost + successor.step_cost;
-
-            // Compute heuristic for the successor state
-            let h = heuristic_impl.lower_bound(&successor.next_state, &desc, target_type_enum, target);
-            let f = cost_value + h;
-
-            if prune {
-                // prune neighbors exceeding current upper bound before enqueueing
-                let ub_ns = heuristic_impl.upper_bound(
-                    &successor.next_state,
-                    &desc,
-                    target_type_enum,
-                    target,
-                );
-                if cost_value + ub_ns > best_ub {
-                    pruned += 1;
-                    continue;
-                } else {
-                    best_ub = cost_value + ub_ns;
-                }
-            }
-
-            // Fire-and-forget: pool handles best cost comparison, parent updates,
-            // heap operations (decrease_key vs push), and heap growth
-            // If state already has better cost_from_start value, it's skipped internally
-            // Transition info is stored in the pool - no separate tracking needed
-            pool.enqueue_or_update_state(
-                successor.next_state,
-                cost_value,
-                Some(&cur_handle),
-                successor.node_index,
-                Some(TransitionInfo {
-                    action: successor.action,
-                    cost: successor.step_cost,
-                }),
-                f,
-            );
-        }
-        // After processing all successors, parent references have been set (which incremented ref_count).
-        // When cur_handle drops, it will automatically decrement ref_count.
-        // If the state has children, their parent references will keep it alive (ref_count > 0).
-        // If it has no children, decrementing will free it, which is correct.
-        // cur_handle is dropped here at end of loop iteration
-    }
-    if use_progress_cb {
-        let _ = maybe_emit_progress(expanded, goal_i.is_some().then(|| goal_g).unwrap_or(0.0), pruned, best_ub);
-    }
-    if let Some(goal_handle) = goal_i {
-        // Extract final state before path reconstruction (since goal_handle will be moved)
-        // Clone NodeState values for better ergonomics, then convert to tuples for Python
-        let final_state: Vec<(i32, i32, i32)> = goal_handle
-            .state(&pool)
-            .unwrap()
-            .0
-            .iter()
-            .map(|ns| {
-                let ns = *ns; // Clone NodeState (Copy)
-                (ns.infra as i32, ns.civ as i32, ns.mil as i32)
             })
-            .collect();
-        
-        // Reconstruct path backwards from goal to start.
-        // All states in the path are kept alive by:
-        // - Goal state: ref_count incremented when handle was created
-        // - Path states: Each state's parent points to its parent, keeping parents alive
-        //   (parent ref_count incremented when parent is set via pool.set_parent_component_and_transition)
-        let mut moves: Vec<(String, String)> = Vec::new();
-        let mut walk = goal_handle;
-        while let Some(parent_handle) = walk.parent(&mut pool) {
-            let component_idx = walk.component_index(&pool).unwrap_or(0);
-            let action = walk.transition_info(&pool)
-                .map(|t| t.action)
-                .unwrap_or("unknown");
-            moves.push((names[component_idx].clone(), action.to_string()));
-            walk = parent_handle;
         }
-        moves.reverse();
-        if verbose {
-            let iters_pretty = fmt_count(expanded);
-            println!(
-                "[A*] goal reached: total_cost={:.4} iters={}",
-                goal_g, iters_pretty
-            );
-            let _ = io::stdout().flush();
-        }
-        Ok((moves, final_state, goal_g))
-    } else {
-        if verbose {
-            let heap_avg_f = pool.heap_avg_f();
-            let iters_pretty = fmt_count(expanded);
-            let heap_pretty = fmt_count(pool.heap_size());
-            let states_pretty = fmt_count(pool.total_states());
-            let pruned_pretty = fmt_count(pruned);
-            let msg = format!(
-            "[A*] final_iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
-            iters_pretty, 0.0, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
-            );
-            println!("{}", msg);
-            let _ = io::stdout().flush();
-        }
-        Err(pyo3::exceptions::PyRuntimeError::new_err(
-            "A* exhausted without finding a goal",
-        ))
-    }
+    });
+    let opts = core::SolveOptions {
+        prune,
+        print_every,
+        heuristic_name: &heuristic,
+        progress_cb: core_cb.as_mut(),
+    };
+    let (moves_idx, final_state_rs, total_cost) = core::solve_and_reconstruct_core(desc, st.clone(), target_type_enum, target, opts);
+    let final_state: Vec<(i32, i32, i32)> = final_state_rs.0.iter().map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32)).collect();
+    let moves: Vec<(String, String)> = moves_idx.into_iter().map(|(i, action)| (names[i].clone(), action.to_string())).collect();
+    Ok((moves, final_state, total_cost))
 }
 
 /// Python module initializer for `hoi4_mdp_core`.
