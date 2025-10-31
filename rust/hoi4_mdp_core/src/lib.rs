@@ -488,7 +488,7 @@ fn solve_and_reconstruct(
     // Global best known solution cost (upper bound). Initialize with greedy plan from start.
     let mut best_ub = upper_bound_convert_then_mil(&st, &desc, target_type_enum, target);
     let mut expanded: usize = 0;
-    let mut goal_i: Option<StateHandle> = None;
+    let mut goal_i: Option<StateHandle<State, TransitionInfo>> = None;
     let mut goal_g: f64 = 0.0;
     let mut pruned: usize = 0;
     if verbose {
@@ -504,9 +504,8 @@ fn solve_and_reconstruct(
     }
     while let Some(cur_handle) = pool.heap_pop() {
         // StateHandle guarantees the state is active - if we have a handle, it's valid.
-        // Increment ref count BEFORE we start using it - this ensures it stays alive during expansion
-        // and until parent references are set in children (which will also increment it)
-        cur_handle.keep_alive(&mut pool);
+        // The handle already has a ref_count (created when popped from heap).
+        // When handle drops, it will automatically decrement ref_count.
         expanded += 1;
 
         let cur_cost = cur_handle.cost_from_start(&pool);
@@ -514,9 +513,9 @@ fn solve_and_reconstruct(
         // Check terminal before any pruning
         if is_terminal(cur, target_type_enum, target) {
             goal_g = cur_cost;
-            goal_i = Some(cur_handle.clone()); // Store handle, not index
-            // Increment ref count to keep goal state alive for path reconstruction
-            cur_handle.keep_alive(&mut pool);
+            // Store handle to keep goal state alive for path reconstruction
+            // Handle will keep ref_count > 0 until we drop it
+            goal_i = Some(cur_handle);
             break;
         }
         if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
@@ -585,10 +584,10 @@ fn solve_and_reconstruct(
             );
         }
         // After processing all successors, parent references have been set (which incremented ref_count).
-        // Now we can decrement the ref count we added at the start of this iteration.
+        // When cur_handle drops, it will automatically decrement ref_count.
         // If the state has children, their parent references will keep it alive (ref_count > 0).
         // If it has no children, decrementing will free it, which is correct.
-        pool.decrement_ref_count(cur_handle.index());
+        // cur_handle is dropped here at end of loop iteration
     }
     if verbose {
         let heap_avg_f = pool.heap_avg_f();
@@ -606,14 +605,27 @@ fn solve_and_reconstruct(
         let _ = io::stdout().flush();
     }
     if let Some(goal_handle) = goal_i {
+        // Extract final state before path reconstruction (since goal_handle will be moved)
+        // Clone NodeState values for better ergonomics, then convert to tuples for Python
+        let final_state: Vec<(i32, i32, i32)> = goal_handle
+            .state(&pool)
+            .unwrap()
+            .0
+            .iter()
+            .map(|ns| {
+                let ns = *ns; // Clone NodeState (Copy)
+                (ns.infra as i32, ns.civ as i32, ns.mil as i32)
+            })
+            .collect();
+        
         // Reconstruct path backwards from goal to start.
         // All states in the path are kept alive by:
-        // - Goal state: ref_count incremented when found
+        // - Goal state: ref_count incremented when handle was created
         // - Path states: Each state's parent points to its parent, keeping parents alive
         //   (parent ref_count incremented when parent is set via pool.set_parent_component_and_transition)
         let mut moves: Vec<(String, String)> = Vec::new();
-        let mut walk = goal_handle.clone();
-        while let Some(parent_handle) = walk.parent(&pool) {
+        let mut walk = goal_handle;
+        while let Some(parent_handle) = walk.parent(&mut pool) {
             let component_idx = walk.component_index(&pool).unwrap_or(0);
             let action = walk.transition_info(&pool)
                 .map(|t| t.action)
@@ -630,13 +642,6 @@ fn solve_and_reconstruct(
             );
             let _ = io::stdout().flush();
         }
-        let final_state: Vec<(i32, i32, i32)> = goal_handle
-            .state(&pool)
-            .unwrap()
-            .0
-            .iter()
-            .map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32))
-            .collect();
         Ok((moves, final_state, goal_g))
     } else {
         if verbose {

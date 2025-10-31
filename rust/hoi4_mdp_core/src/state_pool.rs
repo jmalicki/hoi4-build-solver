@@ -12,65 +12,56 @@ use crate::heap_growth::grow_heap_if_needed;
 /// The handle is valid as long as the state's ref_count > 0.
 ///
 /// When dropped, this handle automatically decrements the state's ref_count.
-#[derive(Clone)]
-pub struct StateHandle {
+/// The handle itself represents a reference to the state, so creating a handle
+/// increments ref_count, and dropping it decrements ref_count.
+pub struct StateHandle<S: Hash + Eq + Clone + Default, T> {
     idx: usize,
     cost: f64,
-    pool_ptr: *mut StatePool<(), ()>, // Type-erased pointer to avoid generics
+    pool_ptr: *mut StatePool<S, T>, // Pointer to the pool that owns this handle
 }
 
 // SAFETY: StateHandle only dereferences pool_ptr to call decrement_ref_count,
 // which only uses the idx field. The pool is guaranteed to outlive the handle
 // because the handle is created by the pool and dropped before the pool.
-unsafe impl Send for StateHandle {}
-unsafe impl Sync for StateHandle {}
+unsafe impl<S: Hash + Eq + Clone + Default, T> Send for StateHandle<S, T> {}
+unsafe impl<S: Hash + Eq + Clone + Default, T> Sync for StateHandle<S, T> {}
 
-impl StateHandle {
+impl<S: Hash + Eq + Clone + Default, T> StateHandle<S, T> {
     /// Get the cost (f value = g+h) for this state.
     pub fn cost(&self) -> f64 {
         self.cost
     }
 
     /// Get the cost from start for this state.
-    pub fn cost_from_start<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> f64 {
+    pub fn cost_from_start(&self, pool: &StatePool<S, T>) -> f64 {
         pool.cost_from_start(self.idx)
     }
 
     /// Get a reference to the state.
-    pub fn state<'a, S: Hash + Eq + Clone + Default, T>(&self, pool: &'a StatePool<S, T>) -> Option<&'a S> {
+    pub fn state<'a>(&self, pool: &'a StatePool<S, T>) -> Option<&'a S> {
         pool.get_state(self.idx)
     }
 
     /// Get the parent handle, if any.
-    pub fn parent<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> Option<StateHandle> {
+    pub fn parent(&self, pool: &mut StatePool<S, T>) -> Option<StateHandle<S, T>> {
         pool.parent_idx(self.idx).map(|parent_idx| {
             // Get parent's cost if available, otherwise 0.0
             let parent_f = pool.get_state(parent_idx)
                 .map(|_| pool.cost_from_start(parent_idx) + 0.0) // Would need h, but for now just cost_from_start
                 .unwrap_or(0.0);
-            StateHandle {
-                idx: parent_idx,
-                cost: parent_f,
-                pool_ptr: self.pool_ptr, // Reuse same pool pointer
-            }
+            // Create handle and increment ref count
+            StateHandle::new(parent_idx, parent_f, pool)
         })
     }
 
     /// Get the transition info for this state.
-    pub fn transition_info<'a, S: Hash + Eq + Clone + Default, T>(&self, pool: &'a StatePool<S, T>) -> Option<&'a T> {
+    pub fn transition_info<'a>(&self, pool: &'a StatePool<S, T>) -> Option<&'a T> {
         pool.transition_info(self.idx)
     }
 
     /// Get the component index for this state (for path reconstruction).
-    pub fn component_index<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> Option<usize> {
+    pub fn component_index(&self, pool: &StatePool<S, T>) -> Option<usize> {
         pool.component_idx(self.idx)
-    }
-
-    /// Keep this state alive for path reconstruction (e.g., goal state).
-    ///
-    /// This increments the ref_count, preventing the state from being freed.
-    pub fn keep_alive<S: Hash + Eq + Clone + Default, T>(&self, pool: &mut StatePool<S, T>) {
-        pool.increment_ref_count(self.idx);
     }
 
     /// Internal method to get the index (only for pool's internal use).
@@ -79,25 +70,30 @@ impl StateHandle {
     }
 
     /// Internal method to create a handle with a pool pointer.
-    pub(crate) fn new<S: Hash + Eq + Clone + Default, T>(
+    /// Also increments ref_count for the handle reference.
+    pub(crate) fn new(
         idx: usize,
         cost: f64,
-        pool: *mut StatePool<S, T>,
+        pool: &mut StatePool<S, T>,
     ) -> Self {
+        // Increment ref_count for this handle
+        pool.increment_ref_count(idx);
         StateHandle {
             idx,
             cost,
-            pool_ptr: pool as *mut StatePool<(), ()>,
+            pool_ptr: pool,
         }
     }
 }
 
-impl Drop for StateHandle {
+impl<S: Hash + Eq + Clone + Default, T> Drop for StateHandle<S, T> {
     fn drop(&mut self) {
-        // StateHandle is used to keep states alive during A* search.
-        // Ref counting is managed manually via pool.decrement_ref_count() to give
-        // precise control over when states are freed (e.g., after parent references are set).
-        // No automatic ref counting on drop - caller must manage ref counts explicitly.
+        // Decrement ref_count when handle is dropped.
+        // SAFETY: The pool pointer was created when the handle was created.
+        // The pool outlives the handle (handle is created by pool, dropped before pool).
+        unsafe {
+            (*self.pool_ptr).decrement_ref_count(self.idx);
+        }
     }
 }
 
@@ -266,12 +262,12 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// The pool will manage states of type `S` with reference counting
     /// and index reuse for efficient A* search.
     ///
-    /// The start state is inserted with g=0 and a ref_count of 1 (for the returned handle).
-    /// The caller should call `keep_alive()` if they want to keep it alive beyond the handle's lifetime,
-    /// or push it to the heap (which will increment ref_count).
+    /// The start state is inserted with cost_from_start=0 and a ref_count of 1 (for the returned handle).
+    /// The handle automatically manages ref_count: creating it increments, dropping it decrements.
+    /// To keep the state alive, keep the handle alive or push it to the heap (which increments ref_count).
     ///
     /// The heap will grow automatically if needed.
-    pub fn new(initial_heap_bound: usize, start_state: S, start_g: f64) -> (Self, StateHandle) {
+    pub fn new(initial_heap_bound: usize, start_state: S, start_g: f64) -> (Self, StateHandle<S, T>) {
         let mut pool = Self {
             states: Vec::new(),
             state_to_idx: HashMap::with_hasher(RapidHasher::new()),
@@ -286,16 +282,15 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         // Insert start state
         let idx = pool.insert_state(start_state);
         pool.set_initial_cost(idx, start_g);
-        // Increment ref count for the handle we're returning
-        pool.increment_ref_count(idx);
         
         // Create handle with cost = g + h (but we don't have h here, so use 0.0 for now)
         // The caller can compute h and push to heap if needed
-        let handle = StateHandle {
+        // StateHandle::new automatically increments ref_count for the handle
+        let handle = StateHandle::new(
             idx,
-            cost: start_g, // Will be updated when pushed to heap with actual f value
-            pool_ptr: &mut pool as *mut StatePool<S, T> as *mut StatePool<(), ()>,
-        };
+            start_g, // Will be updated when pushed to heap with actual f value
+            &mut pool,
+        );
         
         (pool, handle)
     }
@@ -584,10 +579,13 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// - Increments the state's ref_count (for being in heap)
     /// - Updates heap statistics (heap_sum_f, heap_len)
     ///
+    /// Note: The handle already has a ref_count (created when handle was created).
+    /// This method increments again for heap membership.
+    ///
     /// This is part of the public API for A* search, as the initial state needs to be pushed.
-    pub fn heap_push(&mut self, handle: &StateHandle, f: f64) {
+    pub fn heap_push(&mut self, handle: &StateHandle<S, T>, f: f64) {
         let idx = handle.index();
-        self.increment_ref_count(idx);
+        self.increment_ref_count(idx); // Increment for heap membership
         self.open.push(idx, -f);
         self.in_open.insert(idx);
         self.heap_sum_f += f;
@@ -603,7 +601,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// - Decrements the state's ref_count (no longer in heap)
     /// - Removes from in_open set
     /// - Updates heap statistics
-    pub fn heap_pop(&mut self) -> Option<StateHandle> {
+    pub fn heap_pop(&mut self) -> Option<StateHandle<S, T>> {
         if let Some((idx, neg_f)) = self.open.pop() {
             let f = -neg_f;
             self.heap_sum_f -= f;
@@ -611,11 +609,12 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             self.in_open.remove(&idx);
             // Decrement ref count - no longer in heap
             self.decrement_ref_count(idx);
-            Some(StateHandle {
+            // Create handle - this will increment ref_count for the handle
+            Some(StateHandle::new(
                 idx,
-                cost: f,
-                pool_ptr: self as *mut StatePool<S, T> as *mut StatePool<(), ()>,
-            })
+                f,
+                self,
+            ))
         } else {
             None
         }
@@ -702,7 +701,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         &mut self,
         state: S,
         cost_value: f64,
-        parent: &StateHandle,
+        parent: &StateHandle<S, T>,
         component_idx: usize,
         transition_info: Option<T>,
         f: f64,
@@ -720,12 +719,18 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             } else {
                 // Create a temporary handle for heap_push
                 // SAFETY: We know state_idx is valid and active (just created/updated)
+                // StateHandle::new will increment ref_count for the handle
                 let handle = StateHandle::new(
                     state_idx,
                     f,
-                    self as *mut StatePool<S, T>,
+                    self,
                 );
                 self.heap_push(&handle, f);
+                // handle will be dropped here, which will decrement ref_count
+                // But we also incremented in heap_push, so net effect: 
+                // - handle ref_count: +1 (when created) -1 (when dropped) = 0 net
+                // - heap ref_count: +1 (when pushed)
+                // So state has ref_count = 1 (from heap) which is correct
             }
 
             // Check if we need to grow the heap
