@@ -22,14 +22,14 @@
   $\text{sumCivilian} = \sum_j \text{numCivilian}[j]$ over all nodes in
   the current state (using $\max(1, \text{sumCivilian})$ to avoid
   division-by-zero). Immediate action costs are:
-  - civilian: $\text{civilianCost} / \text{infraMultiplier} /
-    \text{sumCivilian}$
-  - military: $\text{militaryCost} / \text{infraMultiplier} /
-    \text{sumCivilian}$
-  - infra: $\text{infraCost} / \text{infraMultiplier} /
-    \text{sumCivilian}$
-  - convert: $\text{conversionCost} / \text{infraMultiplier} /
-    \text{sumCivilian}$
+  - civilian: $\frac{\text{civilianCost}}{\text{infraMultiplier} \times
+    \text{sumCivilian}}$
+  - military: $\frac{\text{militaryCost}}{\text{infraMultiplier} \times
+    \text{sumCivilian}}$
+  - infra: $\frac{\text{infraCost}}{\text{infraMultiplier} \times
+    \text{sumCivilian}}$
+  - convert: $\frac{\text{conversionCost}}{\text{infraMultiplier} \times
+    \text{sumCivilian}}$
 
 ### A* heuristic and pruning
 
