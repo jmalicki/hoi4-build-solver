@@ -141,11 +141,16 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn heap_pop(&mut self) -> Option<StateHandle<S, T>> {
         if let Some((idx, neg_f)) = self.open.pop() {
             let f = -neg_f;
+            // Transfer ownership: first create a handle (increments ref_count),
+            // then drop the heap's reference (decrement).
+            let handle = StateHandle::new(idx, f, self);
             if f.is_finite() { self.heap_sum_f -= f; }
             self.heap_len -= 1;
             self.in_open.remove(&idx);
+            // Decrement heap membership reference; since the handle was just created,
+            // ref_count stays > 0 and metadata (including g) is preserved.
             self.decrement_ref_count(idx);
-            Some(StateHandle::new(idx, f, self))
+            Some(handle)
         } else { None }
     }
     fn heap_decrease_key(&mut self, idx: usize, f: f64) -> bool {
