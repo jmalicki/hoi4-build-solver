@@ -37,6 +37,8 @@ where
     let h0 = heuristic_impl.lower_bound(&start, &desc, target_type, target);
     pool.enqueue_or_update_state(start.clone(), 0.0, None, 0, None, h0);
     let mut best_ub = heuristic_impl.upper_bound(&start, &desc, target_type, target);
+    #[cfg(debug_assertions)]
+    let mut prev_best_ub: Option<f64> = None;
     let mut expanded: usize = 0;
     let mut goal_i: Option<StateHandle<State, super::TransitionInfo>> = None;
     let mut goal_g: f64 = 0.0;
@@ -91,7 +93,26 @@ where
             let ub_suffix = heuristic_impl.upper_bound(&cur_state, &desc, target_type, target);
             let candidate_total = cur_cost + ub_suffix;
             if candidate_total <= best_ub {
+                let old_best_ub = best_ub;
                 best_ub = candidate_total;
+                #[cfg(debug_assertions)]
+                {
+                    if let Some(prev) = prev_best_ub {
+                        debug_assert!(
+                            best_ub <= prev,
+                            "best_ub must never increase (was {}, now {})",
+                            prev,
+                            best_ub
+                        );
+                    }
+                    debug_assert!(
+                        best_ub <= old_best_ub,
+                        "best_ub must never increase (was {}, now {})",
+                        old_best_ub,
+                        best_ub
+                    );
+                    prev_best_ub = Some(best_ub);
+                }
             } else {
                 continue;
             }
@@ -107,7 +128,26 @@ where
                     pruned += 1;
                     continue;
                 } else {
+                    let old_best_ub = best_ub;
                     best_ub = cost_value + ub_ns;
+                    #[cfg(debug_assertions)]
+                    {
+                        if let Some(prev) = prev_best_ub {
+                            debug_assert!(
+                                best_ub <= prev,
+                                "best_ub must never increase (was {}, now {})",
+                                prev,
+                                best_ub
+                            );
+                        }
+                        debug_assert!(
+                            best_ub <= old_best_ub,
+                            "best_ub must never increase (was {}, now {})",
+                            old_best_ub,
+                            best_ub
+                        );
+                        prev_best_ub = Some(best_ub);
+                    }
                 }
             }
             pool.enqueue_or_update_state(
@@ -216,6 +256,66 @@ mod tests {
             iters_prune <= iters_noprune,
             "prune should not expand more nodes"
         );
+    }
+
+    #[test]
+    fn test_heuristic_bounds_invariants() {
+        // Test that bounds satisfy basic invariants: non-negativity and ordering
+        use crate::heuristic::create_by_name;
+        let h = create_by_name("best_infra_upper_bound").unwrap();
+        let desc = make_desc();
+        let start = make_start();
+
+        // Test non-negativity
+        let lb = h.lower_bound(&start, &desc, crate::TargetType::Military, 2);
+        let ub = h.upper_bound(&start, &desc, crate::TargetType::Military, 2);
+        assert!(lb >= 0.0, "lower_bound must be non-negative, got {}", lb);
+        assert!(
+            ub >= 0.0 || ub == f64::INFINITY,
+            "upper_bound must be non-negative or infinity, got {}",
+            ub
+        );
+
+        // Test ordering: lower_bound <= upper_bound
+        if ub != f64::INFINITY {
+            assert!(
+                lb <= ub + 1e-9,
+                "lower_bound must be <= upper_bound, got lb={}, ub={}",
+                lb,
+                ub
+            );
+        }
+
+        // Test on different target types
+        for &target_type in &[
+            crate::TargetType::Military,
+            crate::TargetType::Civilian,
+            crate::TargetType::Factories,
+        ] {
+            let lb = h.lower_bound(&start, &desc, target_type, 2);
+            let ub = h.upper_bound(&start, &desc, target_type, 2);
+            assert!(
+                lb >= 0.0,
+                "lower_bound must be non-negative for {:?}, got {}",
+                target_type,
+                lb
+            );
+            assert!(
+                ub >= 0.0 || ub == f64::INFINITY,
+                "upper_bound must be non-negative or infinity for {:?}, got {}",
+                target_type,
+                ub
+            );
+            if ub != f64::INFINITY {
+                assert!(
+                    lb <= ub + 1e-9,
+                    "lower_bound must be <= upper_bound for {:?}, got lb={}, ub={}",
+                    target_type,
+                    lb,
+                    ub
+                );
+            }
+        }
     }
 
     #[test]
