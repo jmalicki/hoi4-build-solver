@@ -96,6 +96,39 @@ Internally, reuse the same search code used by PyO3, with conversions to/from `J
   - Total cost (display and copy button)
 - Run control: Start, Cancel
 
+## Benchmarking (Heuristics and Pruning)
+
+The web app can include a benchmarking mode to compare search performance across heuristics and pruning settings, fully in-browser:
+
+- Configuration:
+  - Select multiple heuristics to test (checkboxes)
+  - Toggle pruning on/off per heuristic (2× matrix)
+  - Fixed inputs (same nodes/target) across runs
+  - Optional random seeds / repeats (for future stochastic features; currently deterministic)
+
+- Collected metrics per run:
+  - `totalCost` (optimal path cost found)
+  - `wallTimeMs`
+  - `expandedStates` (iters)
+  - `generatedStates` (total enqueues/updates)
+  - `prunedCount` (if pruning enabled)
+  - `heapPeak` and `heapAvgF`
+  - `totalStates` (unique states in pool)
+
+- Presentation:
+  - Table comparing all runs (rows = heuristic×pruning)
+  - Bar charts for `wallTimeMs`, `expandedStates`, `prunedCount`
+  - Download CSV of raw metrics
+
+- API considerations:
+  - Expose a `solve_with_metrics_js(...) -> JsValue` variant returning both result and metrics
+  - Metrics gathered from the existing debug counters in the Rust core
+  - Ensure minimal cross-boundary calls; return metrics in one object at the end of each run
+
+- Execution model:
+  - Each benchmark run executes sequentially in a Web Worker to avoid contention
+  - Progress per run streamed via callback (optional)
+
 ## Incremental Plan
 
 1) Add `wasm` feature and JS API wrappers (behind `cfg`), keep PyO3 intact.
