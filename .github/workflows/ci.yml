@@ -73,13 +73,13 @@ jobs:
         working-directory: src/hoi4_build_core
 
   # Tests
+  # Tests
   test:
-    name: Test (${{ matrix.python }} / ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Test (${{ matrix.python }})
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest]
         python: ["3.10", "3.11", "3.12"]
         rust: [stable]
 
@@ -107,7 +107,7 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          key: cargo-${{ matrix.os }}-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ matrix.rust }}-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build Rust extension
         run: uv run --no-project --with maturin maturin develop --release -m src/hoi4_build_core/Cargo.toml
