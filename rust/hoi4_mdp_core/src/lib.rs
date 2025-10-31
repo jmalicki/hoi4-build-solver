@@ -13,6 +13,7 @@
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 //
 use pyo3::prelude::*;
+use pyo3::types::PyAny;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::io::{self, Write};
@@ -112,6 +113,26 @@ fn fmt_step(n: usize) -> String {
         n.to_string()
     }
 }
+/// Snapshot of solver progress, exposed to Python as a read-only class.
+#[pyclass]
+#[derive(Clone)]
+struct ProgressSnapshot {
+    #[pyo3(get)]
+    iterations: usize,
+    #[pyo3(get)]
+    cost_from_start: f64,
+    #[pyo3(get)]
+    heap_size: usize,
+    #[pyo3(get)]
+    total_states: usize,
+    #[pyo3(get)]
+    avg_f: f64,
+    #[pyo3(get)]
+    pruned: usize,
+    #[pyo3(get)]
+    best_upper_bound: f64,
+}
+
 
 
 /// Information about a successor state generated from an action.
@@ -231,8 +252,8 @@ fn iter_successors<'a>(
 /// Returns tuple[list[(str,str)], list[(int,int,int)], float]
 #[pyfunction]
 #[pyo3(
-    signature = (nodes, target_type, target, *, verbose=false, print_every=1, prune=false, heuristic="best_infra_upper_bound"),
-    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, verbose: bool = False, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound') -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
+    signature = (nodes, target_type, target, *, verbose=false, print_every=1, prune=false, heuristic="best_infra_upper_bound", progress_callback=None),
+    text_signature = "(nodes: list[tuple[str,int,int,int,int]], target_type: str, target: int, *, verbose: bool = False, print_every: int = 1, prune: bool = False, heuristic: str = 'best_infra_upper_bound', progress_callback: Optional[Callable[[ProgressSnapshot], None]] = None) -> tuple[list[tuple[str,str]], list[tuple[int,int,int]], float]"
 )]
 fn solve_and_reconstruct(
     _py: Python<'_>,
@@ -243,6 +264,7 @@ fn solve_and_reconstruct(
     print_every: usize,
     prune: bool,
     heuristic: String,
+    progress_callback: Option<Bound<PyAny>>,
 ) -> PyResult<(Vec<(String, String)>, Vec<(i32, i32, i32)>, f64)> {
     // Parse target type
     let target_type_enum = match target_type.to_lowercase().as_str() {
@@ -309,7 +331,8 @@ fn solve_and_reconstruct(
     let mut goal_i: Option<StateHandle<State, TransitionInfo>> = None;
     let mut goal_g: f64 = 0.0;
     let mut pruned: usize = 0;
-    if verbose {
+    let use_progress_cb = progress_callback.is_some();
+    if verbose && !use_progress_cb {
         let pe = fmt_step(print_every);
         println!(
             "[A*] start: heap={} target_type={:?} target={} print_every={} heuristic={}",
@@ -321,6 +344,26 @@ fn solve_and_reconstruct(
         );
         let _ = io::stdout().flush();
     }
+    // Helper to emit a progress snapshot via callback when provided
+    let mut maybe_emit_progress = |iters: usize, g: f64, pruned_c: usize, best_ub_val: f64| {
+        if !use_progress_cb { return; }
+        if print_every == 0 { return; }
+        if !(iters == 1 || iters.is_multiple_of(print_every)) { return; }
+        let snap = ProgressSnapshot {
+            iterations: iters,
+            cost_from_start: g,
+            heap_size: pool.heap_size(),
+            total_states: pool.total_states(),
+            avg_f: pool.heap_avg_f(),
+            pruned: pruned_c,
+            best_upper_bound: best_ub_val,
+        };
+        if let Some(cb) = &progress_callback {
+            Python::with_gil(|py| {
+                let _ = cb.call1((snap,));
+            });
+        }
+    };
     while let Some(cur_handle) = pool.heap_pop() {
         // StateHandle guarantees the state is active - if we have a handle, it's valid.
         // The handle already has a ref_count (created when popped from heap).
@@ -337,7 +380,9 @@ fn solve_and_reconstruct(
             goal_i = Some(cur_handle);
             break;
         }
-        if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
+        if use_progress_cb {
+            maybe_emit_progress(expanded, cur_cost, pruned, best_ub);
+        } else if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
             let heap_avg_f = pool.heap_avg_f();
             let iters_pretty = fmt_count(expanded);
             let heap_pretty = fmt_count(pool.heap_size());
@@ -408,7 +453,9 @@ fn solve_and_reconstruct(
         // If it has no children, decrementing will free it, which is correct.
         // cur_handle is dropped here at end of loop iteration
     }
-    if verbose {
+    if use_progress_cb {
+        maybe_emit_progress(expanded, goal_i.is_some().then(|| goal_g).unwrap_or(0.0), pruned, best_ub);
+    } else if verbose {
         let heap_avg_f = pool.heap_avg_f();
         let iters_pretty = fmt_count(expanded);
         let heap_pretty = fmt_count(pool.heap_size());
