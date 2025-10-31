@@ -42,7 +42,7 @@ pub(crate) struct NodeState {
 ///
 /// Stored as a vector to support variable numbers of nodes; hashing and equality
 /// are defined via derives on the inner elements and vector content.
-#[derive(Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, Default, Debug)]
 pub(crate) struct State(pub(crate) Vec<NodeState>);
 
 /// Target type for the build planning goal.
