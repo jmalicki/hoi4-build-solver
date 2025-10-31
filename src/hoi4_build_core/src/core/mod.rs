@@ -2,6 +2,8 @@ use crate::heuristic::create_by_name;
 use crate::state_pool::{StateHandle, StatePool};
 use crate::{NodeDesc, State, TargetType, is_terminal};
 
+pub mod exact_solver;
+
 #[derive(Clone)]
 pub struct ProgressSnapshot {
     pub iterations: usize,
@@ -382,6 +384,102 @@ mod tests {
                     prop_assert!(hs <= succ.step_cost + hsp + 1e-9);
                 }
             }
+        }
+
+        #[test]
+        fn prop_upper_bound_admissible_on_small_instances() {
+            // Property test: For small instances where exact solver can run,
+            // verify that upper_bound >= exact_optimal_cost (admissibility)
+            use crate::core::exact_solver::exact_optimal_cost;
+
+            let h = create_by_name("best_infra_upper_bound").unwrap();
+
+            // Generate small instances (≤2 nodes, ≤3 slots, ≤2 target)
+            let desc_strategy = prop::collection::vec(Just(NodeDesc { slots: 3 }), 1..=2);
+            let target_strategy = (0i32..=2);
+            let target_type_strategy = prop::sample::select(&[
+                crate::TargetType::Military,
+                crate::TargetType::Civilian,
+                crate::TargetType::Factories,
+            ]);
+
+            proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
+                // Generate valid start state (small slots, low values)
+                let start = State(desc.iter().map(|d| crate::NodeState {
+                    infra: 0u8,
+                    civ: 0u8.min(d.slots),
+                    mil: 0u8,
+                }).collect());
+
+                // Compute upper bound and exact optimal
+                let ub = h.upper_bound(&start, &desc, target_type, target);
+                let exact_opt = exact_optimal_cost(&desc, &start, target_type, target);
+
+                if let Some(exact) = exact_opt {
+                    // If exact solver found a solution, upper bound must be >= exact optimal
+                    prop_assert!(
+                        ub >= exact || ub == f64::INFINITY,
+                        "Upper bound must be >= exact optimal: ub={}, exact={}",
+                        ub,
+                        exact
+                    );
+                } else {
+                    // If exact solver returned None, upper bound should be non-negative
+                    prop_assert!(
+                        ub >= 0.0 || ub == f64::INFINITY,
+                        "Upper bound must be non-negative or infinity: ub={}",
+                        ub
+                    );
+                }
+            });
+        }
+
+        #[test]
+        fn prop_lower_bound_admissible_on_small_instances() {
+            // Property test: For small instances where exact solver can run,
+            // verify that lower_bound <= exact_optimal_cost (admissibility)
+            use crate::core::exact_solver::exact_optimal_cost;
+
+            let h = create_by_name("best_infra_upper_bound").unwrap();
+
+            // Generate small instances (≤2 nodes, ≤3 slots, ≤2 target)
+            let desc_strategy = prop::collection::vec(Just(NodeDesc { slots: 3 }), 1..=2);
+            let target_strategy = (0i32..=2);
+            let target_type_strategy = prop::sample::select(&[
+                crate::TargetType::Military,
+                crate::TargetType::Civilian,
+                crate::TargetType::Factories,
+            ]);
+
+            proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
+                // Generate valid start state (small slots, low values)
+                let start = State(desc.iter().map(|d| crate::NodeState {
+                    infra: 0u8,
+                    civ: 0u8.min(d.slots),
+                    mil: 0u8,
+                }).collect());
+
+                // Compute lower bound and exact optimal
+                let lb = h.lower_bound(&start, &desc, target_type, target);
+                let exact_opt = exact_optimal_cost(&desc, &start, target_type, target);
+
+                if let Some(exact) = exact_opt {
+                    // If exact solver found a solution, lower bound must be <= exact optimal
+                    prop_assert!(
+                        lb <= exact + 1e-9,
+                        "Lower bound must be <= exact optimal: lb={}, exact={}",
+                        lb,
+                        exact
+                    );
+                } else {
+                    // If exact solver returned None, lower bound should still be non-negative
+                    prop_assert!(
+                        lb >= 0.0,
+                        "Lower bound must be non-negative: lb={}",
+                        lb
+                    );
+                }
+            });
         }
     }
 }
