@@ -14,6 +14,7 @@
 //
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
+use pyo3::exceptions::PyException;
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::io::{self, Write};
@@ -23,6 +24,8 @@ mod heuristic;
 mod state_pool;
 use state_pool::{StatePool, StateHandle};
 use heuristic::{Heuristic, create_by_name};
+// Custom Python exception to signal user-requested early stop
+pyo3::create_exception!(hoi4_mdp_core, SearchStoppedError, PyException);
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]
@@ -374,9 +377,7 @@ fn solve_and_reconstruct(
         if use_progress_cb {
             let stop = maybe_emit_progress(expanded, cur_cost, pruned, best_ub);
             if stop {
-                return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                    "Search stopped by progress callback",
-                ));
+                return Err(SearchStoppedError::new_err("Search stopped by progress callback"));
             }
         }
         if prune {
@@ -508,6 +509,8 @@ fn hoi4_mdp_core(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
         "Rust A* core for HOI4 MDP: solve_and_reconstruct(nodes, target_military, *, verbose=True, print_every=1)",
     )?;
     m.add_function(wrap_pyfunction!(solve_and_reconstruct, m)?)?;
+    // Export the custom exception type
+    m.add("SearchStoppedError", _py.get_type::<SearchStoppedError>())?;
     Ok(())
 }
 // TEST REBUILD 1761866152
