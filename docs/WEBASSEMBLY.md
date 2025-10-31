@@ -8,6 +8,52 @@ This document explores making the solver available as a standalone web app (no b
 - **Approach**: Build a `wasm-bindgen`/`wasm-pack` target that exports a JS-friendly API. Implement a small UI (React/Vite or similar) that parses CSV/Sheets input client-side and calls the WASM solver. Use a Web Worker to keep the UI responsive.
 - **Not needed**: Any backend or server-side compute.
 
+## Decoupling PyO3 (Default) and WASM (Optional)
+
+We keep one codebase with two front-ends over the same core logic. The CLI remains the default; the WebAssembly build is an optional feature.
+
+- Crate layout sketch:
+  - `src/core/` – pure Rust domain + solver API (no PyO3/wasm-bindgen)
+  - `src/py/` – PyO3 bindings (enabled by default via Cargo feature `pyo3`)
+  - `src/wasm/` – wasm-bindgen bindings (enabled by optional Cargo feature `wasm`)
+  - Existing modules (e.g., `state_pool`, `heuristic`) are reused from `core`.
+
+- Cargo features (illustrative):
+  ```toml
+  [features]
+  default = ["pyo3"]
+  pyo3 = ["pyo3/extension-module"]
+  wasm = []
+
+  [target.'cfg(target_arch = "wasm32")'.dependencies]
+  wasm-bindgen = "0.2"
+  serde = { version = "1", features = ["derive"] }
+  serde-wasm-bindgen = "0.6"
+  ```
+
+- Conditional compilation:
+  ```rust
+  // Shared, pure API (called by both py and wasm)
+  pub fn solve_and_reconstruct_core(input: CoreInput, opts: CoreOpts) -> CoreOutput { /* ... */ }
+
+  // PyO3 wrapper (default)
+  #[cfg(feature = "pyo3")]
+  mod py_api { /* #[pyfunction] solve_and_reconstruct(...) calls core */ }
+
+  // WASM wrapper (optional)
+  #[cfg(feature = "wasm")]
+  mod wasm_api { /* #[wasm_bindgen] solve_and_reconstruct_js(...) calls core */ }
+  ```
+
+- Build commands:
+  - Default (CLI/Python): uses `default-features` with PyO3
+  - WASM (web): disable default features, enable `wasm`
+    ```bash
+    wasm-pack build --release --target web --out-dir pkg -- --no-default-features --features wasm
+    ```
+
+This approach ensures the CLI remains the default experience while enabling an optional WebAssembly build without code duplication.
+
 ## Current Architecture Fit
 
 - Rust core (`rust/hoi4_mdp_core`): Primary compute is in Rust and already largely self-contained. Good candidate for WASM.
