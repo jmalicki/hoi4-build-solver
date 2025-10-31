@@ -7,8 +7,8 @@
 //!
 //! See the module README.md for detailed theoretical background and proof of admissibility/consistency.
 
-use crate::{NodeDesc, State, TargetType};
 use super::Heuristic;
+use crate::{NodeDesc, State, TargetType};
 use std::cmp::Ordering;
 
 /// Compute infrastructure multiplier for a given level in [0,5].
@@ -178,7 +178,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
             TargetType::Civilian => {
                 // Build civilian factories only
                 let civ_den = total_civ.max(1) as f64;
-                let mut builds: Vec<(f64, i32)> = empties_per_node.iter().map(|t| (t.2, t.4)).collect();
+                let mut builds: Vec<(f64, i32)> =
+                    empties_per_node.iter().map(|t| (t.2, t.4)).collect();
                 builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
                 let mut ub = 0.0f64;
                 for (build_num, cap) in builds {
@@ -197,7 +198,8 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
                 // Optimize: build cheapest factories (military is cheaper than civilian at 7200 vs 10800)
                 let civ_den = total_civ.max(1) as f64;
                 // Sort by military cost (cheaper), use all empty slots for military first
-                let mut builds: Vec<(f64, i32)> = empties_per_node.iter().map(|t| (t.1, t.4)).collect();
+                let mut builds: Vec<(f64, i32)> =
+                    empties_per_node.iter().map(|t| (t.1, t.4)).collect();
                 builds.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
                 let mut ub = 0.0f64;
                 for (build_num, cap) in builds {

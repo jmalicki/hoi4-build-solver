@@ -15,13 +15,13 @@
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 
+pub mod core;
 mod heap_growth;
 pub mod heuristic;
-pub mod core;
 pub mod py;
 mod state_pool;
-use state_pool::{StatePool, StateHandle};
 use heuristic::{Heuristic, create_by_name};
+use state_pool::{StateHandle, StatePool};
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]
@@ -66,7 +66,12 @@ pub(crate) fn is_terminal(st: &State, target_type: TargetType, target: i32) -> b
     match target_type {
         TargetType::Military => st.0.iter().map(|ns| ns.mil as i32).sum::<i32>() >= target,
         TargetType::Civilian => st.0.iter().map(|ns| ns.civ as i32).sum::<i32>() >= target,
-        TargetType::Factories => st.0.iter().map(|ns| ns.mil as i32 + ns.civ as i32).sum::<i32>() >= target,
+        TargetType::Factories => {
+            st.0.iter()
+                .map(|ns| ns.mil as i32 + ns.civ as i32)
+                .sum::<i32>()
+                >= target
+        }
     }
 }
 
@@ -141,21 +146,36 @@ pub(crate) fn iter_successors<'a>(
             let mut v = Vec::with_capacity(n_nodes);
             v.extend_from_slice(&st.0);
             v[i].civ += 1;
-            out.push(Successor { node_index: i, action: "civilian", next_state: State(v), step_cost: 10800.0 / mult / civ_den });
+            out.push(Successor {
+                node_index: i,
+                action: "civilian",
+                next_state: State(v),
+                step_cost: 10800.0 / mult / civ_den,
+            });
         }
         // military
         if (ns.civ + ns.mil) < nd.slots {
             let mut v = Vec::with_capacity(n_nodes);
             v.extend_from_slice(&st.0);
             v[i].mil += 1;
-            out.push(Successor { node_index: i, action: "military", next_state: State(v), step_cost: 7200.0 / mult / civ_den });
+            out.push(Successor {
+                node_index: i,
+                action: "military",
+                next_state: State(v),
+                step_cost: 7200.0 / mult / civ_den,
+            });
         }
         // infra
         if ns.infra < 5 {
             let mut v = Vec::with_capacity(n_nodes);
             v.extend_from_slice(&st.0);
             v[i].infra += 1;
-            out.push(Successor { node_index: i, action: "infra", next_state: State(v), step_cost: 6000.0 / mult / civ_den });
+            out.push(Successor {
+                node_index: i,
+                action: "infra",
+                next_state: State(v),
+                step_cost: 6000.0 / mult / civ_den,
+            });
         }
         // convert
         if ns.civ >= 1 {
@@ -163,7 +183,12 @@ pub(crate) fn iter_successors<'a>(
             v.extend_from_slice(&st.0);
             v[i].civ -= 1;
             v[i].mil += 1;
-            out.push(Successor { node_index: i, action: "convert", next_state: State(v), step_cost: 4000.0 / mult / civ_den });
+            out.push(Successor {
+                node_index: i,
+                action: "convert",
+                next_state: State(v),
+                step_cost: 4000.0 / mult / civ_den,
+            });
         }
         out
     })

@@ -18,7 +18,9 @@ dependencies = [
 hoi4-mdp-solve = "py.__main__:main"
 
 [tool.uv]
-dev-dependencies = []
+dev-dependencies = [
+    "black>=25.9.0",
+]
 cache-keys = [
   { file = "pyproject.toml" },
   { file = "src/hoi4_mdp_core/Cargo.toml" },

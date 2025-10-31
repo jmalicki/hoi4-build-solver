@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
-use std::hash::Hash;
 use orx_priority_queue::{PriorityQueue, PriorityQueueDecKey, QuaternaryHeapOfIndices};
 use rapidhash::fast::RandomState as RapidHasher;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 
-use crate::heap_growth::grow_heap_if_needed;
 use super::{NonMaxUsize, StateHandle};
+use crate::heap_growth::grow_heap_if_needed;
 
 struct StateWithMetadata<S, T> {
     state: S,
@@ -40,7 +40,9 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
-    fn get_index(&self, state: &S) -> Option<usize> { self.state_to_idx.get(state).copied() }
+    fn get_index(&self, state: &S) -> Option<usize> {
+        self.state_to_idx.get(state).copied()
+    }
 
     fn allocate_index(&mut self) -> usize {
         if let Some(idx) = self.free_indices.pop() {
@@ -88,9 +90,17 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
-    fn set_parent_component_and_transition(&mut self, child_idx: usize, parent_idx: Option<usize>, component_idx: usize, transition_info: Option<T>) {
+    fn set_parent_component_and_transition(
+        &mut self,
+        child_idx: usize,
+        parent_idx: Option<usize>,
+        component_idx: usize,
+        transition_info: Option<T>,
+    ) {
         // Decrement old parent ref count if present
-        if let Some(old_parent) = self.states[child_idx].parent_idx { self.decrement_ref_count(old_parent.get()); }
+        if let Some(old_parent) = self.states[child_idx].parent_idx {
+            self.decrement_ref_count(old_parent.get());
+        }
         // Increment new parent ref count if present (start state has no parent)
         if let Some(pidx) = parent_idx {
             self.increment_ref_count(pidx);
@@ -98,12 +108,15 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         } else {
             self.states[child_idx].parent_idx = None;
         }
-        self.states[child_idx].component_idx = Some(unsafe { NonMaxUsize::new_unchecked(component_idx) });
+        self.states[child_idx].component_idx =
+            Some(unsafe { NonMaxUsize::new_unchecked(component_idx) });
         self.states[child_idx].transition_info = transition_info;
     }
 
     pub fn decrement_ref_count(&mut self, idx: usize) {
-        if idx >= self.states.len() { return; }
+        if idx >= self.states.len() {
+            return;
+        }
         self.states[idx].ref_count = self.states[idx].ref_count.saturating_sub(1);
         if self.states[idx].ref_count == 0 {
             self.state_to_idx.remove(&self.states[idx].state);
@@ -115,20 +128,59 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
-    pub fn increment_ref_count(&mut self, idx: usize) { if idx < self.states.len() { self.states[idx].ref_count += 1; } }
-    pub fn get_state(&self, idx: usize) -> Option<&S> { self.states.get(idx).map(|sm| &sm.state) }
-    pub fn ref_count(&self, idx: usize) -> u32 { self.states.get(idx).map(|sm| sm.ref_count).unwrap_or(0) }
-    pub fn is_active(&self, idx: usize) -> bool { idx < self.states.len() && self.states[idx].ref_count > 0 }
-    pub fn cost_from_start(&self, idx: usize) -> f64 { self.states.get(idx).map(|sm| sm.cost_from_start).unwrap_or(f64::INFINITY) }
-    pub fn set_initial_cost(&mut self, idx: usize, cost: f64) { if let Some(sm) = self.states.get_mut(idx) { sm.cost_from_start = cost; } }
-    pub fn parent_idx(&self, idx: usize) -> Option<usize> { self.states.get(idx).and_then(|sm| sm.parent_idx.map(|i| i.get())) }
-    pub fn component_idx(&self, idx: usize) -> Option<usize> { self.states.get(idx).and_then(|sm| sm.component_idx.map(|i| i.get())) }
-    pub fn transition_info(&self, idx: usize) -> Option<&T> { self.states.get(idx).and_then(|sm| sm.transition_info.as_ref()) }
+    pub fn increment_ref_count(&mut self, idx: usize) {
+        if idx < self.states.len() {
+            self.states[idx].ref_count += 1;
+        }
+    }
+    pub fn get_state(&self, idx: usize) -> Option<&S> {
+        self.states.get(idx).map(|sm| &sm.state)
+    }
+    pub fn ref_count(&self, idx: usize) -> u32 {
+        self.states.get(idx).map(|sm| sm.ref_count).unwrap_or(0)
+    }
+    pub fn is_active(&self, idx: usize) -> bool {
+        idx < self.states.len() && self.states[idx].ref_count > 0
+    }
+    pub fn cost_from_start(&self, idx: usize) -> f64 {
+        self.states
+            .get(idx)
+            .map(|sm| sm.cost_from_start)
+            .unwrap_or(f64::INFINITY)
+    }
+    pub fn set_initial_cost(&mut self, idx: usize, cost: f64) {
+        if let Some(sm) = self.states.get_mut(idx) {
+            sm.cost_from_start = cost;
+        }
+    }
+    pub fn parent_idx(&self, idx: usize) -> Option<usize> {
+        self.states
+            .get(idx)
+            .and_then(|sm| sm.parent_idx.map(|i| i.get()))
+    }
+    pub fn component_idx(&self, idx: usize) -> Option<usize> {
+        self.states
+            .get(idx)
+            .and_then(|sm| sm.component_idx.map(|i| i.get()))
+    }
+    pub fn transition_info(&self, idx: usize) -> Option<&T> {
+        self.states
+            .get(idx)
+            .and_then(|sm| sm.transition_info.as_ref())
+    }
 
-    pub fn total_states(&self) -> usize { self.states.len() }
-    pub fn used_states(&self) -> usize { self.states.len() - self.free_indices.len() }
-    pub fn free_indices_count(&self) -> usize { self.free_indices.len() }
-    pub fn heap_capacity(&self) -> usize { self.states.len() }
+    pub fn total_states(&self) -> usize {
+        self.states.len()
+    }
+    pub fn used_states(&self) -> usize {
+        self.states.len() - self.free_indices.len()
+    }
+    pub fn free_indices_count(&self) -> usize {
+        self.free_indices.len()
+    }
+    pub fn heap_capacity(&self) -> usize {
+        self.states.len()
+    }
 
     pub fn heap_push(&mut self, handle: &StateHandle<S, T>, f: f64) {
         let idx = handle.index();
@@ -142,19 +194,25 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             self.heap_sum_f = 0.0;
             self.heap_len = 0;
             let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
-            while let Some((i, neg)) = self.open.pop() { tmp.push((i, neg)); }
+            while let Some((i, neg)) = self.open.pop() {
+                tmp.push((i, neg));
+            }
             for (i, neg) in tmp.into_iter() {
                 self.open.push(i, neg);
                 self.in_open.insert(i);
                 let f_i = -neg;
-                if f_i.is_finite() { self.heap_sum_f += f_i; }
+                if f_i.is_finite() {
+                    self.heap_sum_f += f_i;
+                }
                 self.heap_len += 1;
             }
         }
         self.increment_ref_count(idx);
         self.open.push(idx, -f);
         self.in_open.insert(idx);
-        if f.is_finite() { self.heap_sum_f += f; }
+        if f.is_finite() {
+            self.heap_sum_f += f;
+        }
         self.heap_len += 1;
     }
     pub fn heap_pop(&mut self) -> Option<StateHandle<S, T>> {
@@ -163,62 +221,112 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             // Transfer ownership: first create a handle (increments ref_count),
             // then drop the heap's reference (decrement).
             let handle = StateHandle::new(idx, f, self);
-            if f.is_finite() { self.heap_sum_f -= f; }
+            if f.is_finite() {
+                self.heap_sum_f -= f;
+            }
             self.heap_len -= 1;
             self.in_open.remove(&idx);
             // Decrement heap membership reference; since the handle was just created,
             // ref_count stays > 0 and metadata (including g) is preserved.
             self.decrement_ref_count(idx);
             Some(handle)
-        } else { None }
+        } else {
+            None
+        }
     }
     fn heap_decrease_key(&mut self, idx: usize, f: f64) -> bool {
-        if !self.in_open.contains(&idx) { return false; }
+        if !self.in_open.contains(&idx) {
+            return false;
+        }
         self.open.decrease_key(&idx, -f);
         true
     }
-    fn is_in_heap(&self, idx: usize) -> bool { self.in_open.contains(&idx) }
-    pub fn heap_len(&self) -> usize { self.heap_len }
-    pub fn heap_avg_f(&self) -> f64 { if self.heap_len == 0 { 0.0 } else { self.heap_sum_f / (self.heap_len as f64) } }
-    pub fn heap_size(&self) -> usize { self.open.len() }
-    fn heap_mut_for_growth(&mut self) -> &mut QuaternaryHeapOfIndices<usize, f64> { &mut self.open }
-    fn heap_bound(&self) -> usize { self.heap_bound }
-    fn set_heap_bound(&mut self, new_bound: usize) { self.heap_bound = new_bound; }
-    fn heap_bound_mut(&mut self) -> &mut usize { &mut self.heap_bound }
+    fn is_in_heap(&self, idx: usize) -> bool {
+        self.in_open.contains(&idx)
+    }
+    pub fn heap_len(&self) -> usize {
+        self.heap_len
+    }
+    pub fn heap_avg_f(&self) -> f64 {
+        if self.heap_len == 0 {
+            0.0
+        } else {
+            self.heap_sum_f / (self.heap_len as f64)
+        }
+    }
+    pub fn heap_size(&self) -> usize {
+        self.open.len()
+    }
+    fn heap_mut_for_growth(&mut self) -> &mut QuaternaryHeapOfIndices<usize, f64> {
+        &mut self.open
+    }
+    fn heap_bound(&self) -> usize {
+        self.heap_bound
+    }
+    fn set_heap_bound(&mut self, new_bound: usize) {
+        self.heap_bound = new_bound;
+    }
+    fn heap_bound_mut(&mut self) -> &mut usize {
+        &mut self.heap_bound
+    }
 
-    pub fn enqueue_or_update_state(&mut self, state: S, cost_value: f64, parent: Option<&StateHandle<S, T>>, component_idx: usize, transition_info: Option<T>, f: f64) -> bool {
-        if cost_value.is_nan() || f.is_nan() || cost_value < 0.0 || f < 0.0 { return false; }
+    pub fn enqueue_or_update_state(
+        &mut self,
+        state: S,
+        cost_value: f64,
+        parent: Option<&StateHandle<S, T>>,
+        component_idx: usize,
+        transition_info: Option<T>,
+        f: f64,
+    ) -> bool {
+        if cost_value.is_nan() || f.is_nan() || cost_value < 0.0 || f < 0.0 {
+            return false;
+        }
         if let Some(state_idx_nm) = self.try_update_best_cost(state, cost_value) {
             let state_idx = state_idx_nm.get();
             let parent_idx = parent.map(|p| p.index());
-            self.set_parent_component_and_transition(state_idx, parent_idx, component_idx, transition_info);
+            self.set_parent_component_and_transition(
+                state_idx,
+                parent_idx,
+                component_idx,
+                transition_info,
+            );
             // Ensure heap can accommodate this index BEFORE pushing/decreasing
             if state_idx >= self.heap_bound {
                 while self.heap_bound <= state_idx {
-                    let _ = grow_heap_if_needed(&mut self.open, state_idx + 1, &mut self.heap_bound);
+                    let _ =
+                        grow_heap_if_needed(&mut self.open, state_idx + 1, &mut self.heap_bound);
                 }
                 // Rebuild accounting structures after growth
                 self.in_open.clear();
                 self.heap_sum_f = 0.0;
                 self.heap_len = 0;
                 let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
-                while let Some((idx, neg_f)) = self.open.pop() { tmp.push((idx, neg_f)); }
+                while let Some((idx, neg_f)) = self.open.pop() {
+                    tmp.push((idx, neg_f));
+                }
                 for (idx, neg_f) in tmp.into_iter() {
                     self.open.push(idx, neg_f);
                     self.in_open.insert(idx);
                     let f = -neg_f;
-                    if f.is_finite() { self.heap_sum_f += f; }
+                    if f.is_finite() {
+                        self.heap_sum_f += f;
+                    }
                     self.heap_len += 1;
                 }
             }
-            if self.is_in_heap(state_idx) { self.heap_decrease_key(state_idx, f); } else {
+            if self.is_in_heap(state_idx) {
+                self.heap_decrease_key(state_idx, f);
+            } else {
                 let handle = StateHandle::new(state_idx, f, self);
                 self.heap_push(&handle, f);
             }
             let heap_capacity = self.heap_capacity();
             grow_heap_if_needed(&mut self.open, heap_capacity, &mut self.heap_bound);
             true
-        } else { false }
+        } else {
+            false
+        }
     }
 
     /// Create a handle for a given active index. Increments ref-count for the handle.
@@ -235,7 +343,10 @@ mod tests {
     struct TestState(u32);
 
     #[derive(Clone, Debug, PartialEq)]
-    struct TestTransition { action: &'static str, cost: f64 }
+    struct TestTransition {
+        action: &'static str,
+        cost: f64,
+    }
 
     fn make_pool() -> StatePool<TestState, TestTransition> {
         StatePool::new(1024)
@@ -290,10 +401,22 @@ mod tests {
         let mut pool = make_pool();
         let parent_idx = pool.insert_state(TestState(10));
         let parent = pool.make_handle(parent_idx, 0.0);
-        let ok = pool.enqueue_or_update_state(TestState(11), 1.0, Some(&parent), 0, Some(TestTransition{action:"a", cost:1.0}), 2.0);
+        let ok = pool.enqueue_or_update_state(
+            TestState(11),
+            1.0,
+            Some(&parent),
+            0,
+            Some(TestTransition {
+                action: "a",
+                cost: 1.0,
+            }),
+            2.0,
+        );
         assert!(ok);
-        let bad1 = pool.enqueue_or_update_state(TestState(12), f64::NAN, Some(&parent), 0, None, 2.0);
-        let bad2 = pool.enqueue_or_update_state(TestState(13), 1.0, Some(&parent), 0, None, f64::NAN);
+        let bad1 =
+            pool.enqueue_or_update_state(TestState(12), f64::NAN, Some(&parent), 0, None, 2.0);
+        let bad2 =
+            pool.enqueue_or_update_state(TestState(13), 1.0, Some(&parent), 0, None, f64::NAN);
         let bad3 = pool.enqueue_or_update_state(TestState(14), -1.0, Some(&parent), 0, None, 2.0);
         let bad4 = pool.enqueue_or_update_state(TestState(15), 1.0, Some(&parent), 0, None, -2.0);
         assert!(!bad1 && !bad2 && !bad3 && !bad4);

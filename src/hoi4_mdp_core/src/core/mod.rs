@@ -1,6 +1,6 @@
 use crate::heuristic::{Heuristic, create_by_name};
-use crate::state_pool::{StatePool, StateHandle};
-use crate::{State, NodeDesc, TargetType, is_terminal, iter_successors};
+use crate::state_pool::{StateHandle, StatePool};
+use crate::{NodeDesc, State, TargetType, is_terminal, iter_successors};
 
 #[derive(Clone)]
 pub struct ProgressSnapshot {
@@ -69,34 +69,55 @@ where
                     let mut walk = cur_handle;
                     while let Some(parent_handle) = walk.parent(&mut pool) {
                         let idx = walk.component_index(&pool).unwrap_or(0);
-                        let action = walk.transition_info(&pool).map(|t| t.action).unwrap_or("unknown");
+                        let action = walk
+                            .transition_info(&pool)
+                            .map(|t| t.action)
+                            .unwrap_or("unknown");
                         moves.push((idx, action));
                         walk = parent_handle;
                     }
                     moves.reverse();
-                    return (moves, cur_state.clone(), cur_cost + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target));
+                    return (
+                        moves,
+                        cur_state.clone(),
+                        cur_cost
+                            + heuristic_impl.lower_bound(&cur_state, &desc, target_type, target),
+                    );
                 }
             }
         }
         if opts.prune {
             let ub_suffix = heuristic_impl.upper_bound(&cur_state, &desc, target_type, target);
             let candidate_total = cur_cost + ub_suffix;
-            if candidate_total <= best_ub { best_ub = candidate_total; } else { continue; }
+            if candidate_total <= best_ub {
+                best_ub = candidate_total;
+            } else {
+                continue;
+            }
         }
         let successors = super::iter_successors(&cur_state, &desc).collect::<Vec<_>>();
         for successor in successors {
             let cost_value = cur_cost + successor.step_cost;
             let h = heuristic_impl.lower_bound(&successor.next_state, &desc, target_type, target);
             if opts.prune {
-                let ub_ns = heuristic_impl.upper_bound(&successor.next_state, &desc, target_type, target);
-                if cost_value + ub_ns > best_ub { pruned += 1; continue; } else { best_ub = cost_value + ub_ns; }
+                let ub_ns =
+                    heuristic_impl.upper_bound(&successor.next_state, &desc, target_type, target);
+                if cost_value + ub_ns > best_ub {
+                    pruned += 1;
+                    continue;
+                } else {
+                    best_ub = cost_value + ub_ns;
+                }
             }
             pool.enqueue_or_update_state(
                 successor.next_state,
                 cost_value,
                 Some(&cur_handle),
                 successor.node_index,
-                Some(super::TransitionInfo { action: successor.action, cost: successor.step_cost }),
+                Some(super::TransitionInfo {
+                    action: successor.action,
+                    cost: successor.step_cost,
+                }),
                 cost_value + h,
             );
         }
@@ -108,7 +129,10 @@ where
         let mut walk = goal_handle;
         while let Some(parent_handle) = walk.parent(&mut pool) {
             let idx = walk.component_index(&pool).unwrap_or(0);
-            let action = walk.transition_info(&pool).map(|t| t.action).unwrap_or("unknown");
+            let action = walk
+                .transition_info(&pool)
+                .map(|t| t.action)
+                .unwrap_or("unknown");
             moves.push((idx, action));
             walk = parent_handle;
         }
@@ -132,8 +156,16 @@ mod tests {
     fn make_start() -> State {
         // infra=0, civ=1, mil=0 on first; infra=0, civ=0, mil=0 on second
         State(vec![
-            crate::NodeState { infra: 0, civ: 1, mil: 0 },
-            crate::NodeState { infra: 0, civ: 0, mil: 0 },
+            crate::NodeState {
+                infra: 0,
+                civ: 1,
+                mil: 0,
+            },
+            crate::NodeState {
+                infra: 0,
+                civ: 0,
+                mil: 0,
+            },
         ])
     }
 
@@ -152,12 +184,37 @@ mod tests {
             iters_noprune = snap.iterations;
             false
         };
-        let opts_prune = SolveOptions { prune: true, print_every: 1, heuristic_name: "best_infra_upper_bound", progress_cb: Some(&mut cb_prune) };
-        let opts_noprune = SolveOptions { prune: false, print_every: 1, heuristic_name: "best_infra_upper_bound", progress_cb: Some(&mut cb_noprune) };
-        let (_m1, _s1, cost_prune) = solve_and_reconstruct_core(desc.clone(), start.clone(), crate::TargetType::Military, 2, opts_prune);
-        let (_m2, _s2, cost_noprune) = solve_and_reconstruct_core(desc.clone(), start.clone(), crate::TargetType::Military, 2, opts_noprune);
+        let opts_prune = SolveOptions {
+            prune: true,
+            print_every: 1,
+            heuristic_name: "best_infra_upper_bound",
+            progress_cb: Some(&mut cb_prune),
+        };
+        let opts_noprune = SolveOptions {
+            prune: false,
+            print_every: 1,
+            heuristic_name: "best_infra_upper_bound",
+            progress_cb: Some(&mut cb_noprune),
+        };
+        let (_m1, _s1, cost_prune) = solve_and_reconstruct_core(
+            desc.clone(),
+            start.clone(),
+            crate::TargetType::Military,
+            2,
+            opts_prune,
+        );
+        let (_m2, _s2, cost_noprune) = solve_and_reconstruct_core(
+            desc.clone(),
+            start.clone(),
+            crate::TargetType::Military,
+            2,
+            opts_noprune,
+        );
         assert!((cost_prune - cost_noprune).abs() < 1e-9, "costs must match");
-        assert!(iters_prune <= iters_noprune, "prune should not expand more nodes");
+        assert!(
+            iters_prune <= iters_noprune,
+            "prune should not expand more nodes"
+        );
     }
 
     #[test]
@@ -168,7 +225,13 @@ mod tests {
         let h_s = h.lower_bound(&start, &desc, crate::TargetType::Factories, 3);
         for succ in crate::iter_successors(&start, &desc) {
             let h_sp = h.lower_bound(&succ.next_state, &desc, crate::TargetType::Factories, 3);
-            assert!(h_s <= succ.step_cost + h_sp + 1e-9, "consistency violated: h(s)={} > c+ h(s')={} + {}", h_s, succ.step_cost, h_sp);
+            assert!(
+                h_s <= succ.step_cost + h_sp + 1e-9,
+                "consistency violated: h(s)={} > c+ h(s')={} + {}",
+                h_s,
+                succ.step_cost,
+                h_sp
+            );
         }
     }
 
@@ -176,16 +239,24 @@ mod tests {
     use proptest::prelude::*;
 
     fn arb_desc() -> impl Strategy<Value = Vec<NodeDesc>> {
-        prop::collection::vec((1u8..=5u8), 1..=4).prop_map(|slots| slots.into_iter().map(|s| NodeDesc{slots:s}).collect())
+        prop::collection::vec((1u8..=5u8), 1..=4)
+            .prop_map(|slots| slots.into_iter().map(|s| NodeDesc { slots: s }).collect())
     }
     fn arb_state_from(desc: Vec<NodeDesc>) -> impl Strategy<Value = State> {
         let n = desc.len();
         let per = desc.into_iter().map(|nd| {
             (0u8..=5u8, 0u8..=nd.slots, 0u8..=nd.slots)
-                .prop_filter("capacity", move |(_i,c,m)| c.saturating_add(*m) <= nd.slots)
+                .prop_filter("capacity", move |(_i, c, m)| {
+                    c.saturating_add(*m) <= nd.slots
+                })
         });
-        prop::collection::vec(Union::new(per.collect::<Vec<_>>()), n..=n)
-            .prop_map(|v| State(v.into_iter().map(|(infra,civ,mil)| crate::NodeState{infra,civ,mil}).collect()))
+        prop::collection::vec(Union::new(per.collect::<Vec<_>>()), n..=n).prop_map(|v| {
+            State(
+                v.into_iter()
+                    .map(|(infra, civ, mil)| crate::NodeState { infra, civ, mil })
+                    .collect(),
+            )
+        })
     }
 
     proptest! {

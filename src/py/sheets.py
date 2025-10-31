@@ -57,7 +57,7 @@ def _safe_int(value) -> int:
     if pd.isna(value):
         return 0
     s = str(value).strip()
-    if not s or s == '':
+    if not s or s == "":
         return 0
     try:
         return int(float(s))  # Handle "1.0" -> 1
@@ -70,9 +70,12 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
     df = pd.read_csv(csv_url)
     # Normalize column names: lowercase, remove spaces/underscores
     norm = {c: c for c in df.columns}
+
     def canon(s: str) -> str:
         return s.strip().lower().replace(" ", "").replace("_", "")
+
     inv = {canon(c): c for c in df.columns}
+
     def pick(*aliases: str) -> str:
         for a in aliases:
             if a in inv:
@@ -85,13 +88,15 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
     col_civ = pick("numcivilian", "civilian", "civ", "civilianfactories")
     col_mil = pick("nummilitary", "military", "mil", "militaryfactories")
 
-    df = df.rename(columns={
-        col_name: "nodeName",
-        col_slots: "numSlots",
-        col_infra: "numInfra",
-        col_civ: "numCivilian",
-        col_mil: "numMilitary",
-    })
+    df = df.rename(
+        columns={
+            col_name: "nodeName",
+            col_slots: "numSlots",
+            col_infra: "numInfra",
+            col_civ: "numCivilian",
+            col_mil: "numMilitary",
+        }
+    )
     # Optional columns: Docks, Refineries (subtract from numSlots)
     # Optional docks/refineries with aliasing
     docks_alias = None
@@ -116,12 +121,18 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
     for _, row in df.iterrows():
         # Skip rows with empty/invalid names
         node_name = str(row["nodeName"]).strip()
-        if not node_name or node_name == '' or node_name.lower() == 'nan':
+        if not node_name or node_name == "" or node_name.lower() == "nan":
             continue
 
-        effective_slots = _safe_int(row["numSlots"]) - _safe_int(row.get("Docks", 0)) - _safe_int(row.get("Refineries", 0))
+        effective_slots = (
+            _safe_int(row["numSlots"])
+            - _safe_int(row.get("Docks", 0))
+            - _safe_int(row.get("Refineries", 0))
+        )
         if effective_slots < 0:
-            raise ValueError(f"Effective slots negative after subtracting Docks/Refineries for node {node_name}")
+            raise ValueError(
+                f"Effective slots negative after subtracting Docks/Refineries for node {node_name}"
+            )
 
         num_infra = _safe_int(row["numInfra"])
         if num_infra < 0 or num_infra > 5:

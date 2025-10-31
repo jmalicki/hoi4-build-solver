@@ -3,8 +3,8 @@
 //! Always returns 0 for the admissible lower bound and `f64::INFINITY` for the
 //! upper bound so no pruning is performed. This reduces A* to Dijkstra's algorithm.
 
-use crate::{NodeDesc, State, TargetType};
 use super::Heuristic;
+use crate::{NodeDesc, State, TargetType};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ZeroHeuristic;

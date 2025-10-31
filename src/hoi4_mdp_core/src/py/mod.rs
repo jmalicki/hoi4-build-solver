@@ -1,6 +1,6 @@
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use pyo3::exceptions::PyException;
 
 use crate::core;
 use crate::{NodeDesc, State, TargetType};
@@ -101,11 +101,9 @@ fn solve_and_reconstruct(
                 pruned: snap.pruned,
                 best_upper_bound: snap.best_upper_bound,
             };
-            Python::with_gil(|_py| {
-                match cb.call1((py_snap,)) {
-                    Ok(val) => val.extract::<bool>().unwrap_or(false),
-                    Err(_) => false,
-                }
+            Python::with_gil(|_py| match cb.call1((py_snap,)) {
+                Ok(val) => val.extract::<bool>().unwrap_or(false),
+                Err(_) => false,
             })
         }
     });
@@ -115,9 +113,17 @@ fn solve_and_reconstruct(
         heuristic_name: heuristic,
         progress_cb: core_cb.as_mut(),
     };
-    let (moves_idx, final_state_rs, total_cost) = core::solve_and_reconstruct_core(desc, st.clone(), target_type_enum, target, opts);
-    let final_state: Vec<(i32, i32, i32)> = final_state_rs.0.iter().map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32)).collect();
-    let moves: Vec<(String, String)> = moves_idx.into_iter().map(|(i, action)| (names[i].clone(), action.to_string())).collect();
+    let (moves_idx, final_state_rs, total_cost) =
+        core::solve_and_reconstruct_core(desc, st.clone(), target_type_enum, target, opts);
+    let final_state: Vec<(i32, i32, i32)> = final_state_rs
+        .0
+        .iter()
+        .map(|ns| (ns.infra as i32, ns.civ as i32, ns.mil as i32))
+        .collect();
+    let moves: Vec<(String, String)> = moves_idx
+        .into_iter()
+        .map(|(i, action)| (names[i].clone(), action.to_string()))
+        .collect();
     Ok((moves, final_state, total_cost))
 }
 

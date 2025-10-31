@@ -28,9 +28,13 @@ use std::mem;
 pub unsafe fn grow_heap_vector(open: &mut QuaternaryHeapOfIndices<usize, f64>, new_bound: usize) {
     // Safe fallback under unsafe signature: rebuild heap with larger bound (O(n log n))
     let mut entries: Vec<(usize, f64)> = Vec::with_capacity(open.len());
-    while let Some((idx, neg_f)) = open.pop() { entries.push((idx, neg_f)); }
+    while let Some((idx, neg_f)) = open.pop() {
+        entries.push((idx, neg_f));
+    }
     let mut rebuilt = QuaternaryHeapOfIndices::with_index_bound(new_bound);
-    for (idx, neg_f) in entries.into_iter() { rebuilt.push(idx, neg_f); }
+    for (idx, neg_f) in entries.into_iter() {
+        rebuilt.push(idx, neg_f);
+    }
     *open = rebuilt;
 }
 
@@ -42,11 +46,19 @@ mod tests {
 
     unsafe fn positions_len(h: &QuaternaryHeapOfIndices<usize, f64>) -> usize {
         #[repr(C)]
-        struct HeapPositionsHasIndexInternal { positions: Vec<usize>, ph: PhantomData<usize> }
+        struct HeapPositionsHasIndexInternal {
+            positions: Vec<usize>,
+            ph: PhantomData<usize>,
+        }
         #[repr(C)]
-        struct HeapInternal { tree: Vec<(usize, f64)>, positions: HeapPositionsHasIndexInternal }
+        struct HeapInternal {
+            tree: Vec<(usize, f64)>,
+            positions: HeapPositionsHasIndexInternal,
+        }
         #[repr(C)]
-        struct DaryHeapOfIndicesInternal { heap: HeapInternal }
+        struct DaryHeapOfIndicesInternal {
+            heap: HeapInternal,
+        }
         let heap: &DaryHeapOfIndicesInternal = mem::transmute(h);
         heap.heap.positions.positions.len()
     }
@@ -65,7 +77,9 @@ mod tests {
         let _ = unsafe { positions_len(&h) };
         // Verify we can still pop in correct order
         let mut seq = Vec::new();
-        while let Some((_idx, negf)) = h.pop() { seq.push(negf); }
+        while let Some((_idx, negf)) = h.pop() {
+            seq.push(negf);
+        }
         // QuaternaryHeap pops smallest key first; since we store -f, order is ascending neg_f
         assert_eq!(seq, vec![-3.0, -2.0, -1.0]);
     }
@@ -99,7 +113,9 @@ mod tests {
         // Now pop all and ensure neg_f sequence is strictly decreasing (max first)
         let mut prev: Option<f64> = None;
         while let Some((_idx, negf)) = h.pop() {
-            if let Some(p) = prev { assert!(p <= negf, "heap order violated: {} !<= {}", p, negf); }
+            if let Some(p) = prev {
+                assert!(p <= negf, "heap order violated: {} !<= {}", p, negf);
+            }
             prev = Some(negf);
         }
     }

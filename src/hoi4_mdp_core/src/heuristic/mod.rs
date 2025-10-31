@@ -62,10 +62,7 @@ pub fn create_by_name(name: &str) -> Result<Box<dyn Heuristic>, String> {
 
 /// Return canonical heuristic names supported.
 pub fn list_names() -> Vec<&'static str> {
-    vec![
-        "best_infra_upper_bound",
-        "djikstra",
-    ]
+    vec!["best_infra_upper_bound", "djikstra"]
 }
 
 /// Map input name (including aliases) to canonical name.
