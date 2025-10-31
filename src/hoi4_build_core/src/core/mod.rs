@@ -262,7 +262,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn prop_lb_le_ub(desc in arb_desc(), st in arb_state_from(desc.clone())) {
+        fn prop_lb_le_ub((desc, st) in arb_desc().prop_flat_map(|d| (Just(d.clone()), arb_state_from(d)))) {
             let h = create_by_name("best_infra_upper_bound").unwrap();
             for &tt in &[crate::TargetType::Military, crate::TargetType::Civilian, crate::TargetType::Factories] {
                 let lb = h.lower_bound(&st, &desc, tt, 0);
@@ -272,7 +272,7 @@ mod tests {
         }
 
         #[test]
-        fn prop_consistency(desc in arb_desc(), st in arb_state_from(desc.clone())) {
+        fn prop_consistency((desc, st) in arb_desc().prop_flat_map(|d| (Just(d.clone()), arb_state_from(d)))) {
             let h = create_by_name("best_infra_upper_bound").unwrap();
             for &tt in &[crate::TargetType::Military, crate::TargetType::Civilian, crate::TargetType::Factories] {
                 let hs = h.lower_bound(&st, &desc, tt, 1);
