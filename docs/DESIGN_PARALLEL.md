@@ -39,8 +39,8 @@ struct ConstructionItem {
 }
 ```
 
-**Both factory allocation and infra multiplier are implicit**: When processing
-the queue:
+**Both factory allocation and infra multiplier are implicit**:
+When processing the queue:
 
 - **Factory allocation**: Computed in FIFO order (first item gets min(15,
   remaining_factories), etc.)
