@@ -17,7 +17,7 @@ These functions have implementation-specific names that don't reflect their role
 
 ### Module Structure
 
-```
+```text
 src/
   lib.rs              # Main solver logic
   heuristic/

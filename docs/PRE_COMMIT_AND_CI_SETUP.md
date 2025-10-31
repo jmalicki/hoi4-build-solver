@@ -522,7 +522,7 @@ Add to the top of `README.md`:
 ---
 
 [Rest of README content...]
-```
+```markdown
 
 **Note**: Replace `jmalicki/hoi4-buildsolve` with the actual repository path.
 
@@ -530,7 +530,7 @@ Add to the top of `README.md`:
 
 Create `LICENSE` file in repository root:
 
-```
+```text
 MIT License
 
 Copyright (c) 2025 Joseph Malicki
