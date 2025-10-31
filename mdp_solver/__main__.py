@@ -109,7 +109,8 @@ def load_nodes_from_csv(path: str) -> List["Node"]:
 @click.option("--gamma", default=0.999, show_default=True, type=float, help="Discount factor")
 @click.option("--no-prune", "no_prune", is_flag=True, default=False, help="Disable pruning (default: pruning enabled)")
 @click.option("--print-every", "print_every", default=10000, show_default=True, type=int, help="Print progress every N iterations (0 to disable)")
-def main(input_path: str | None, sheet_url: str | None, target_type: str, target_value: int, moves_out: str, final_out: str, gamma: float, no_prune: bool, print_every: int) -> None:
+@click.option("--heuristic", "heuristic_name", default="best_infra_upper_bound", show_default=True, type=click.Choice(["best_infra_upper_bound", "standard", "djikstra", "dijkstra", "zero"], case_sensitive=False), help="Heuristic to use: best_infra_upper_bound (alias: standard) or djikstra (aliases: dijkstra, zero)")
+def main(input_path: str | None, sheet_url: str | None, target_type: str, target_value: int, moves_out: str, final_out: str, gamma: float, no_prune: bool, print_every: int, heuristic_name: str) -> None:
     if bool(input_path) == bool(sheet_url):
         raise click.UsageError("Provide exactly one of --input or --sheet-url")
     nodes = load_nodes_from_csv(input_path) if input_path else load_nodes_from_gsheet(sheet_url)  # type: ignore[arg-type]
@@ -155,10 +156,10 @@ def main(input_path: str | None, sheet_url: str | None, target_type: str, target
 
     rust_nodes = [(n.name, int(n.num_slots), int(n.num_infra), int(n.num_civilian), int(n.num_military)) for n in nodes]
     # Immediate banner to confirm run start before entering the solver
-    print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}", flush=True)
+    print(f"[A*] invoking rust core: target_type={target_type_lower}, target={target_value}, nodes={len(rust_nodes)}, heuristic={heuristic_name}", flush=True)
     moves, final_state_vec, total_cost = hoi4_mdp_core.solve_and_reconstruct(
         rust_nodes, target_type_lower, int(target_value), verbose=True, print_every=print_every,
-        prune=not no_prune,
+        prune=not no_prune, heuristic=heuristic_name,
     )
     goal_state = tuple((int(i), int(c), int(m)) for (i, c, m) in final_state_vec)
 
