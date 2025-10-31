@@ -17,17 +17,52 @@ class Node:
     num_military: int
 
 
-_GDRIVE_EXPORT_RE = re.compile(r"/edit\?.*?gid=(\d+).*")
+# Extract sheet ID from various URL formats
+_SHEET_ID_RE = re.compile(r"/spreadsheets/d/([a-zA-Z0-9-_]+)")
+# Extract gid from URL (optional)
+_GID_RE = re.compile(r"[#&?]gid=(\d+)")
 
 
 def to_export_csv_url(sheet_url: str) -> str:
-    # Convert .../edit?...gid=NNN to .../export?format=csv&gid=NNN
-    m = _GDRIVE_EXPORT_RE.search(sheet_url)
-    if not m:
-        raise ValueError("Sheet URL must contain a gid parameter; open the desired tab and copy the URL.")
-    gid = m.group(1)
-    base = sheet_url.split("/edit", 1)[0]
-    return f"{base}/export?format=csv&gid={gid}"
+    """
+    Convert a Google Sheets URL to a CSV export URL.
+    
+    Supports URLs with or without gid parameter:
+    - With gid: .../edit?gid=123 -> .../export?format=csv&gid=123
+    - Without gid: .../edit -> .../export?format=csv (exports first tab)
+    """
+    # Extract sheet ID
+    sheet_id_match = _SHEET_ID_RE.search(sheet_url)
+    if not sheet_id_match:
+        raise ValueError(
+            "Could not find sheet ID in URL. "
+            "Expected format: https://docs.google.com/spreadsheets/d/SHEET_ID/..."
+        )
+    sheet_id = sheet_id_match.group(1)
+    
+    # Extract gid if present (from query params, hash, or #gid=...)
+    gid_match = _GID_RE.search(sheet_url)
+    if gid_match:
+        gid = gid_match.group(1)
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv&gid={gid}"
+    else:
+        # No gid specified, export first tab
+        return f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
+
+
+def _safe_int(value) -> int:
+    """
+    Safely convert a value to int, treating empty/whitespace/NaN as 0.
+    """
+    if pd.isna(value):
+        return 0
+    s = str(value).strip()
+    if not s or s == '':
+        return 0
+    try:
+        return int(float(s))  # Handle "1.0" -> 1
+    except (ValueError, TypeError):
+        return 0
 
 
 def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
@@ -79,18 +114,27 @@ def load_nodes_from_gsheet(sheet_url: str) -> List[Node]:
         df = df.rename(columns={ref_alias: "Refineries"})
     nodes: List[Node] = []
     for _, row in df.iterrows():
-        effective_slots = int(row["numSlots"]) - int(row["Docks"]) - int(row["Refineries"])
+        # Skip rows with empty/invalid names
+        node_name = str(row["nodeName"]).strip()
+        if not node_name or node_name == '' or node_name.lower() == 'nan':
+            continue
+        
+        effective_slots = _safe_int(row["numSlots"]) - _safe_int(row.get("Docks", 0)) - _safe_int(row.get("Refineries", 0))
         if effective_slots < 0:
-            raise ValueError(f"Effective slots negative after subtracting Docks/Refineries for node {row['nodeName']}")
+            raise ValueError(f"Effective slots negative after subtracting Docks/Refineries for node {node_name}")
+        
+        num_infra = _safe_int(row["numInfra"])
+        if num_infra < 0 or num_infra > 5:
+            # Skip rows with invalid infra values
+            continue
+        
         node = Node(
-            name=str(row["nodeName"]),
+            name=node_name,
             num_slots=effective_slots,
-            num_infra=int(row["numInfra"]),
-            num_civilian=int(row["numCivilian"]),
-            num_military=int(row["numMilitary"]),
+            num_infra=num_infra,
+            num_civilian=_safe_int(row["numCivilian"]),
+            num_military=_safe_int(row["numMilitary"]),
         )
-        if node.num_infra < 0 or node.num_infra > 5:
-            raise ValueError(f"numInfra out of range [0,5] for node {node.name}")
         if node.num_civilian < 0 or node.num_military < 0:
             raise ValueError(f"Negative factories on node {node.name}")
         if node.num_civilian + node.num_military > node.num_slots:
