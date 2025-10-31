@@ -13,18 +13,15 @@
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 
 use smallvec::SmallVec;
-use std::cmp::Ordering;
 
 pub mod core;
 mod heap_growth;
 pub mod heuristic;
 pub mod py;
 mod state_pool;
-use heuristic::{Heuristic, create_by_name};
-use state_pool::{StateHandle, StatePool};
 
 /// Static descriptor of a node (immutable across search).
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) struct NodeDesc {
     slots: u8, // 0..=255
 }
@@ -34,7 +31,7 @@ pub(crate) struct NodeDesc {
 /// - infra: infrastructure level in [0,5]
 /// - civ: number of civilian factories (>= 0)
 /// - mil: number of military factories (>= 0)
-#[derive(Clone, Copy, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug)]
 pub(crate) struct NodeState {
     pub(crate) infra: u8, // 0..=5
     pub(crate) civ: u8,   // 0..=255 (see docs)
@@ -45,7 +42,7 @@ pub(crate) struct NodeState {
 ///
 /// Stored as a vector to support variable numbers of nodes; hashing and equality
 /// are defined via derives on the inner elements and vector content.
-#[derive(Clone, Eq, PartialEq, Hash, Default)]
+#[derive(Clone, Eq, PartialEq, Hash, Default, Debug)]
 pub(crate) struct State(pub(crate) Vec<NodeState>);
 
 /// Target type for the build planning goal.
@@ -79,6 +76,7 @@ fn infra_mult(infra: u8) -> f64 {
     1.0 + (2.0 * (infra as f64)) / 10.0
 }
 
+#[allow(dead_code)]
 fn fmt_count(n: usize) -> String {
     if n >= 1_000_000_000 {
         format!("{:.2}B", (n as f64) / 1_000_000_000.0)
@@ -91,6 +89,7 @@ fn fmt_count(n: usize) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn fmt_step(n: usize) -> String {
     if n.is_multiple_of(1_000_000_000) && n >= 1_000_000_000 {
         format!("{}B", n / 1_000_000_000)

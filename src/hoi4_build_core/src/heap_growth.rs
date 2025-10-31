@@ -5,15 +5,16 @@
 //
 // Structure: QuaternaryHeapOfIndices { heap: Heap { tree: Vec<(N, K)>, positions: HeapPositionsHasIndex { positions: Vec<usize>, ph: PhantomData } } }
 
-use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
-use std::marker::PhantomData;
-use std::mem;
+#![allow(
+    clippy::all,
+    unsafe_code,
+    unsafe_op_in_unsafe_fn,
+    unused,
+    missing_docs,
+    clippy::missing_docs_in_private_items
+)]
 
-/// Unsafe helper to access internal vector and grow it directly.
-///
-/// This function uses unsafe transmute to access the private `positions` field
-/// of the heap and resize its internal Vec to accommodate more indices.
-///
+use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
 /// # Safety
 ///
 /// This function is unsafe because it:
@@ -43,6 +44,8 @@ mod tests {
     use super::*;
     use orx_priority_queue::PriorityQueue;
     use orx_priority_queue::PriorityQueueDecKey;
+    use std::marker::PhantomData;
+    use std::mem;
 
     unsafe fn positions_len(h: &QuaternaryHeapOfIndices<usize, f64>) -> usize {
         #[repr(C)]
