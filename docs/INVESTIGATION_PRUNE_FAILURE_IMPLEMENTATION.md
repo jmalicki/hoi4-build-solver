@@ -52,9 +52,11 @@ investigating why `prune_does_not_expand_more_than_no_prune_and_cost_matches` is
   ```
 
 - [ ] Run:
+
   ```bash
   cargo test --manifest-path src/hoi4_build_core/Cargo.toml --lib prune_does_not_expand_more_than_no_prune_and_cost_matches -- --nocapture
   ```
+
   and observe behavior
 - [ ] Run `cargo fmt --all --manifest-path src/hoi4_build_core/Cargo.toml`
 - [ ] Run `pre-commit run --all-files` and fix any issues
