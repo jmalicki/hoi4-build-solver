@@ -1,6 +1,6 @@
-use crate::heuristic::{Heuristic, create_by_name};
+use crate::heuristic::create_by_name;
 use crate::state_pool::{StateHandle, StatePool};
-use crate::{NodeDesc, State, TargetType, is_terminal, iter_successors};
+use crate::{NodeDesc, State, TargetType, is_terminal};
 
 #[derive(Clone)]
 pub struct ProgressSnapshot {

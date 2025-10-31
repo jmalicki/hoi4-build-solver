@@ -13,15 +13,12 @@
 //   bound on future civilians: civUpper = civ + max(0, empty - remainingMil).
 
 use smallvec::SmallVec;
-use std::cmp::Ordering;
 
 pub mod core;
 mod heap_growth;
 pub mod heuristic;
 pub mod py;
 mod state_pool;
-use heuristic::{Heuristic, create_by_name};
-use state_pool::{StateHandle, StatePool};
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]

@@ -6,8 +6,6 @@
 // Structure: QuaternaryHeapOfIndices { heap: Heap { tree: Vec<(N, K)>, positions: HeapPositionsHasIndex { positions: Vec<usize>, ph: PhantomData } } }
 
 use orx_priority_queue::{PriorityQueue, QuaternaryHeapOfIndices};
-use std::marker::PhantomData;
-use std::mem;
 
 /// Unsafe helper to access internal vector and grow it directly.
 ///
@@ -43,6 +41,8 @@ mod tests {
     use super::*;
     use orx_priority_queue::PriorityQueue;
     use orx_priority_queue::PriorityQueueDecKey;
+    use std::marker::PhantomData;
+    use std::mem;
 
     unsafe fn positions_len(h: &QuaternaryHeapOfIndices<usize, f64>) -> usize {
         #[repr(C)]
