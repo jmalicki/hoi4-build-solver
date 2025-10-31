@@ -56,17 +56,30 @@ The program will take the initial list of nodes and their values, and produce:
 
 ### Modeling details
 
-- **States**: A state encodes all nodes’ (`numInfra`, `numCivilian`, `numMilitary`) values. `numSlots` is per-node fixed input and not part of the dynamic state. `totalCost` is not part of the state (it is accumulated via per-action costs as negative rewards). The terminal states satisfy `sum(numMilitary over nodes) = targetMilitary` (we accept any terminal with minimal cost).
+- **States**: A state encodes all nodes’ (`numInfra`, `numCivilian`,
+  `numMilitary`) values. `numSlots` is per-node fixed input and not part
+  of the dynamic state. `totalCost` is not part of the state (it is
+  accumulated via per-action costs as negative rewards). The terminal
+  states satisfy `sum(numMilitary over nodes) = targetMilitary` (we
+  accept any terminal with minimal cost).
 
-- **Actions**: For each time step, the action set is the union across nodes of four choices, but feasibility depends on the current node’s values:
+- **Actions**: For each time step, the action set is the union across
+  nodes of four choices, but feasibility depends on the current node’s
+  values:
   - `civilian(node)` valid if `numCivilian + numMilitary < numSlots`.
   - `military(node)` valid if `numCivilian + numMilitary < numSlots`.
   - `infra(node)` valid if `numInfra < 5`.
   - `convert(node)` valid if `numCivilian ≥ 1` and `numMilitary + numCivilian ≤ numSlots` after conversion.
 
-- **Transitions**: Deterministic. Each valid action updates exactly one node’s variables by ±1 and leaves other nodes unchanged. In A*, we generate successors on demand; goal detection ends the search.
+- **Transitions**: Deterministic. Each valid action updates exactly one
+  node’s variables by ±1 and leaves other nodes unchanged. In A*, we
+  generate successors on demand; goal detection ends the search.
 
-- **Action cost**: Let `i` be the chosen node and `k = numInfra[i]` before the action. Define `infraMultiplier = 1 + (2 * k) / 10` and let `sumCivilian = Σ_j numCivilian[j]` over all nodes in the current state. The immediate cost of an action is the base cost divided by both multipliers:
+- **Action cost**: Let `i` be the chosen node and `k = numInfra[i]`
+  before the action. Define `infraMultiplier = 1 + (2 * k) / 10` and let
+  `sumCivilian = Σ_j numCivilian[j]` over all nodes in the current state.
+  The immediate cost of an action is the base cost divided by both
+  multipliers:
   - civilian: `civilianCost / infraMultiplier / sumCivilian`
   - military: `militaryCost / infraMultiplier / sumCivilian`
   - infra: `infraCost / infraMultiplier / sumCivilian`
