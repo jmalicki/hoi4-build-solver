@@ -126,7 +126,7 @@ repos:
       - id: codespell
         args: [
             "-L",
-            "crate,the,nd", # Extend ignore list as needed
+            "crate,the", # Extend ignore list as needed
             "--skip",
             "*.lock,*.toml,target/,Cargo.lock,uv.lock",
           ]

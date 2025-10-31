@@ -274,7 +274,7 @@ impl State {
 }
 ```
 
-### Successor Generation
+### Successor Generation Implementation
 
 ```rust
 fn iter_successors(state: &State, nodes: &[NodeDesc]) -> impl Iterator<Item = Successor> {
