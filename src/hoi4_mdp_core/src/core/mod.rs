@@ -244,10 +244,10 @@ mod tests {
     }
     fn arb_state_from(desc: Vec<NodeDesc>) -> impl Strategy<Value = State> {
         let n = desc.len();
-        let per = desc.into_iter().map(|nd| {
-            (0u8..=5u8, 0u8..=nd.slots, 0u8..=nd.slots)
+        let per = desc.into_iter().map(|node_desc| {
+            (0u8..=5u8, 0u8..=node_desc.slots, 0u8..=node_desc.slots)
                 .prop_filter("capacity", move |(_i, c, m)| {
-                    c.saturating_add(*m) <= nd.slots
+                    c.saturating_add(*m) <= node_desc.slots
                 })
         });
         prop::collection::vec(Union::new(per.collect::<Vec<_>>()), n..=n).prop_map(|v| {

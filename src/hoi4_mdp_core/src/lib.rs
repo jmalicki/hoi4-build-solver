@@ -138,11 +138,11 @@ pub(crate) fn iter_successors<'a>(
     let n_nodes = st.0.len();
     let civ_den = st.0.iter().map(|ns| ns.civ as i32).sum::<i32>().max(1) as f64;
     st.0.iter().enumerate().flat_map(move |(i, ns)| {
-        let nd = &nodes[i];
+        let node_desc = &nodes[i];
         let mult = infra_mult(ns.infra);
         let mut out: SmallVec<[Successor; 4]> = SmallVec::new();
         // civilian
-        if (ns.civ + ns.mil) < nd.slots {
+        if (ns.civ + ns.mil) < node_desc.slots {
             let mut v = Vec::with_capacity(n_nodes);
             v.extend_from_slice(&st.0);
             v[i].civ += 1;
@@ -154,7 +154,7 @@ pub(crate) fn iter_successors<'a>(
             });
         }
         // military
-        if (ns.civ + ns.mil) < nd.slots {
+        if (ns.civ + ns.mil) < node_desc.slots {
             let mut v = Vec::with_capacity(n_nodes);
             v.extend_from_slice(&st.0);
             v[i].mil += 1;

@@ -36,12 +36,12 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         let mut cur_civ = 0i32;
         let mut sum_civ = 0i32;
         let mut empty = 0i32;
-        for (ns, nd) in st.0.iter().zip(nodes.iter()) {
+        for (ns, node_desc) in st.0.iter().zip(nodes.iter()) {
             cur_mil += ns.mil as i32;
             cur_civ += ns.civ as i32;
             sum_civ += ns.civ as i32;
             let used = ns.civ as i32 + ns.mil as i32;
-            empty += ((nd.slots as i32) - used).max(0);
+            empty += ((node_desc.slots as i32) - used).max(0);
         }
 
         let remaining = match target_type {
@@ -105,12 +105,12 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         let mut total_civ = 0i32;
         let mut empties_per_node: Vec<(f64, f64, f64, i32, i32)> = Vec::with_capacity(st.0.len());
         // store (conv_unit_num, build_mil_num, build_civ_num, civ_count, empty_slots)
-        for (ns, nd) in st.0.iter().zip(nodes.iter()) {
+        for (ns, node_desc) in st.0.iter().zip(nodes.iter()) {
             cur_mil += ns.mil as i32;
             cur_civ += ns.civ as i32;
             total_civ += ns.civ as i32;
             let used = ns.civ as i32 + ns.mil as i32;
-            let empty = ((nd.slots as i32) - used).max(0);
+            let empty = ((node_desc.slots as i32) - used).max(0);
             let mult = infra_mult(ns.infra);
             let conv_num = 4000.0 / mult; // denominator applied later
             let build_mil_num = 7200.0 / mult;
