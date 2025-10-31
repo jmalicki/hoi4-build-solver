@@ -118,5 +118,3 @@ where
         (Vec::new(), start, 0.0)
     }
 }
-
-
