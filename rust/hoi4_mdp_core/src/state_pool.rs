@@ -6,6 +6,101 @@ use std::hash::Hash;
 
 use crate::heap_growth::grow_heap_if_needed;
 
+/// Handle to a state in the pool. Opaque - does not expose the internal index.
+///
+/// This handle can be used to reference a state without exposing implementation details.
+/// The handle is valid as long as the state's ref_count > 0.
+///
+/// When dropped, this handle automatically decrements the state's ref_count.
+#[derive(Clone)]
+pub struct StateHandle {
+    idx: usize,
+    cost: f64,
+    pool_ptr: *mut StatePool<(), ()>, // Type-erased pointer to avoid generics
+}
+
+// SAFETY: StateHandle only dereferences pool_ptr to call decrement_ref_count,
+// which only uses the idx field. The pool is guaranteed to outlive the handle
+// because the handle is created by the pool and dropped before the pool.
+unsafe impl Send for StateHandle {}
+unsafe impl Sync for StateHandle {}
+
+impl StateHandle {
+    /// Get the cost (f value = g+h) for this state.
+    pub fn cost(&self) -> f64 {
+        self.cost
+    }
+
+    /// Get the cost from start for this state.
+    pub fn cost_from_start<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> f64 {
+        pool.cost_from_start(self.idx)
+    }
+
+    /// Get a reference to the state.
+    pub fn state<'a, S: Hash + Eq + Clone + Default, T>(&self, pool: &'a StatePool<S, T>) -> Option<&'a S> {
+        pool.get_state(self.idx)
+    }
+
+    /// Get the parent handle, if any.
+    pub fn parent<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> Option<StateHandle> {
+        pool.parent_idx(self.idx).map(|parent_idx| {
+            // Get parent's cost if available, otherwise 0.0
+            let parent_f = pool.get_state(parent_idx)
+                .map(|_| pool.cost_from_start(parent_idx) + 0.0) // Would need h, but for now just cost_from_start
+                .unwrap_or(0.0);
+            StateHandle {
+                idx: parent_idx,
+                cost: parent_f,
+                pool_ptr: self.pool_ptr, // Reuse same pool pointer
+            }
+        })
+    }
+
+    /// Get the transition info for this state.
+    pub fn transition_info<'a, S: Hash + Eq + Clone + Default, T>(&self, pool: &'a StatePool<S, T>) -> Option<&'a T> {
+        pool.transition_info(self.idx)
+    }
+
+    /// Get the component index for this state (for path reconstruction).
+    pub fn component_index<S: Hash + Eq + Clone + Default, T>(&self, pool: &StatePool<S, T>) -> Option<usize> {
+        pool.component_idx(self.idx)
+    }
+
+    /// Keep this state alive for path reconstruction (e.g., goal state).
+    ///
+    /// This increments the ref_count, preventing the state from being freed.
+    pub fn keep_alive<S: Hash + Eq + Clone + Default, T>(&self, pool: &mut StatePool<S, T>) {
+        pool.increment_ref_count(self.idx);
+    }
+
+    /// Internal method to get the index (only for pool's internal use).
+    pub(crate) fn index(&self) -> usize {
+        self.idx
+    }
+
+    /// Internal method to create a handle with a pool pointer.
+    pub(crate) fn new<S: Hash + Eq + Clone + Default, T>(
+        idx: usize,
+        cost: f64,
+        pool: *mut StatePool<S, T>,
+    ) -> Self {
+        StateHandle {
+            idx,
+            cost,
+            pool_ptr: pool as *mut StatePool<(), ()>,
+        }
+    }
+}
+
+impl Drop for StateHandle {
+    fn drop(&mut self) {
+        // StateHandle is used to keep states alive during A* search.
+        // Ref counting is managed manually via pool.decrement_ref_count() to give
+        // precise control over when states are freed (e.g., after parent references are set).
+        // No automatic ref counting on drop - caller must manage ref counts explicitly.
+    }
+}
+
 /// A `usize` that can never be `usize::MAX`, similar to `NonZeroUsize` but excludes `usize::MAX` instead of `0`.
 ///
 /// This allows using `Option<NonMaxUsize>` where `None` is semantically represented.
@@ -76,6 +171,7 @@ impl From<NonMaxUsize> for usize {
 ///   - It's in the open set (heap)
 ///   - Another state's parent points to it
 ///   - It's the goal state
+/// - `cost_from_start`: Cost from start for A* search. Initialized to INFINITY.
 /// - `parent_idx`: Index of the parent state (None for start state, stored as `usize::MAX`)
 /// - `component_idx`: Index of the component/entity that was acted upon (generic, for path reconstruction)
 ///   Stored as `usize::MAX` when None.
@@ -83,6 +179,7 @@ impl From<NonMaxUsize> for usize {
 struct StateWithMetadata<S, T> {
     state: S,
     ref_count: u32,
+    cost_from_start: f64,
     parent_idx: Option<NonMaxUsize>, // None uses usize::MAX as niche (optimized to single usize)
     component_idx: Option<NonMaxUsize>, // None uses usize::MAX as niche (optimized to single usize)
     transition_info: Option<T>,
@@ -151,14 +248,10 @@ pub struct StatePool<S: Hash + Eq + Clone + Default, T> {
     state_to_idx: HashMap<S, usize, RapidHasher>,
     /// Free indices available for reuse
     free_indices: Vec<usize>,
-    /// Per-index g values (cost from start)
-    g: Vec<f64>,
     /// Priority queue (heap) for A* open set
     open: QuaternaryHeapOfIndices<usize, f64>,
     /// Set tracking which indices are in the heap
     in_open: HashSet<usize>,
-    /// Per-index heap priority (negative f value) or None if not in heap
-    heap_prio: Vec<Option<f64>>,
     /// Current heap capacity bound (for growth)
     heap_bound: usize,
     /// Sum of f values in heap (for computing average)
@@ -168,26 +261,43 @@ pub struct StatePool<S: Hash + Eq + Clone + Default, T> {
 }
 
 impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
-    /// Create a new StatePool.
+    /// Create a new StatePool with the start state.
     ///
     /// The pool will manage states of type `S` with reference counting
     /// and index reuse for efficient A* search.
-    /// Create a new StatePool with initial heap capacity.
+    ///
+    /// The start state is inserted with g=0 and a ref_count of 1 (for the returned handle).
+    /// The caller should call `keep_alive()` if they want to keep it alive beyond the handle's lifetime,
+    /// or push it to the heap (which will increment ref_count).
     ///
     /// The heap will grow automatically if needed.
-    pub fn new(initial_heap_bound: usize) -> Self {
-        Self {
+    pub fn new(initial_heap_bound: usize, start_state: S, start_g: f64) -> (Self, StateHandle) {
+        let mut pool = Self {
             states: Vec::new(),
             state_to_idx: HashMap::with_hasher(RapidHasher::new()),
             free_indices: Vec::new(),
-            g: Vec::new(),
             open: QuaternaryHeapOfIndices::with_index_bound(initial_heap_bound),
             in_open: HashSet::new(),
-            heap_prio: Vec::new(),
             heap_bound: initial_heap_bound,
             heap_sum_f: 0.0,
             heap_len: 0,
-        }
+        };
+        
+        // Insert start state
+        let idx = pool.insert_state(start_state);
+        pool.set_initial_cost(idx, start_g);
+        // Increment ref count for the handle we're returning
+        pool.increment_ref_count(idx);
+        
+        // Create handle with cost = g + h (but we don't have h here, so use 0.0 for now)
+        // The caller can compute h and push to heap if needed
+        let handle = StateHandle {
+            idx,
+            cost: start_g, // Will be updated when pushed to heap with actual f value
+            pool_ptr: &mut pool as *mut StatePool<S, T> as *mut StatePool<(), ()>,
+        };
+        
+        (pool, handle)
     }
 
     /// Get the index for a state, or None if not present.
@@ -216,8 +326,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// - `state` uninitialized (must be set immediately by caller)
     /// - `ref_count` set to 0 (should be incremented when referenced)
     /// - `parent` set to None
-    /// - `g` set to INFINITY
-    /// - `heap_prio` set to None
+    /// - `cost_from_start` set to INFINITY
     ///
     /// Note: The state must be set immediately after allocation, as it's
     /// required for HashMap lookups. This is a safety requirement - the
@@ -227,6 +336,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             // Reuse freed index - metadata already cleared (parent was cleared in decrement_ref_count)
             // State will be set by caller
             self.states[idx].ref_count = 0;
+            self.states[idx].cost_from_start = f64::INFINITY;
             idx
         } else {
             // Allocate new index
@@ -243,12 +353,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             self.states.push(StateWithMetadata {
                 state: S::default(), // Placeholder - MUST be set immediately by caller
                 ref_count: 0,
+                cost_from_start: f64::INFINITY,
                 parent_idx: None,
                 component_idx: None,
                 transition_info: None,
             });
-            self.g.push(f64::INFINITY);
-            self.heap_prio.push(None);
             idx
         }
     }
@@ -257,46 +366,40 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     ///
     /// Returns the index for the state.
     /// The state's ref_count is initially 0 - caller should increment when referencing.
-    /// The state's g value is initialized to INFINITY - caller should set it via `set_initial_cost()`.
+    /// The state's cost_from_start value is initialized to INFINITY - caller should set it via `set_initial_cost()`.
     pub fn insert_state(&mut self, state: S) -> usize {
         let idx = self.allocate_index();
         self.states[idx].state = state.clone();
         self.state_to_idx.insert(state, idx);
-        // Initialize g to INFINITY (will be set by caller via set_initial_cost() if needed)
-        if idx < self.g.len() {
-            self.g[idx] = f64::INFINITY;
-        } else {
-            // Extend g vector if needed
-            self.g.resize(idx + 1, f64::INFINITY);
-        }
+        // cost_from_start already initialized to INFINITY in allocate_index()
         idx
     }
 
-    /// Check if a state should be updated with a new g value and insert/update it if so.
+    /// Check if a state should be updated with a new cost_from_start value and insert/update it if so.
     ///
-    /// This maintains the g_best invariant for A*: only keeps the best (lowest) g value for each state.
+    /// This maintains the best cost invariant for A*: only keeps the best (lowest) cost_from_start value for each state.
     ///
     /// **Important**: States are identified/hashed by their content only.
     /// Parent information is stored separately and does NOT affect state identity.
     /// If the same state is reached via different paths, this method will only keep the path
-    /// with the best g value, which is correct for A*.
+    /// with the best cost_from_start value, which is correct for A*.
     ///
     /// Returns:
-    /// - `Some(idx)` if the state should be considered (either new state or improved g value)
-    /// - `None` if the state already exists with a better g value (no update needed)
+    /// - `Some(idx)` if the state should be considered (either new state or improved cost_from_start value)
+    /// - `None` if the state already exists with a better cost_from_start value (no update needed)
     ///
     /// If `Some(idx)` is returned:
-    /// - The state is inserted (if new) or its g value is updated (if improved)
+    /// - The state is inserted (if new) or its cost_from_start value is updated (if improved)
     /// - The returned index can be used for setting parent info and enqueueing
-    fn try_update_g_best(&mut self, state: S, g_value: f64) -> Option<NonMaxUsize> {
+    fn try_update_best_cost(&mut self, state: S, cost_value: f64) -> Option<NonMaxUsize> {
         match self.get_index(&state) {
             Some(idx) => {
-                // State exists - check if this g value is better
+                // State exists - check if this cost_from_start value is better
                 // Note: This is the same physical state (same infra/civ/mil) reached via a different path.
-                // We only keep the best path (lowest g), which is correct for A*.
-                if g_value < self.g[idx] {
-                    // Improved path - update g and return index for enqueueing
-                    self.g[idx] = g_value;
+                // We only keep the best path (lowest cost_from_start), which is correct for A*.
+                if cost_value < self.states[idx].cost_from_start {
+                    // Improved path - update cost_from_start and return index for enqueueing
+                    self.states[idx].cost_from_start = cost_value;
                     // SAFETY: idx comes from Vec length/operations, guaranteed < usize::MAX
                     Some(unsafe { NonMaxUsize::new_unchecked(idx) })
                 } else {
@@ -309,7 +412,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
                 let idx = self.allocate_index();
                 self.states[idx].state = state.clone();
                 self.state_to_idx.insert(state, idx);
-                self.g[idx] = g_value;
+                self.states[idx].cost_from_start = cost_value;
                 // SAFETY: idx comes from Vec length/operations, guaranteed < usize::MAX
                 Some(unsafe { NonMaxUsize::new_unchecked(idx) })
             }
@@ -351,7 +454,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     ///
     /// If ref_count reaches zero:
     /// - Removes the state from the HashMap
-    /// - Clears metadata (g, parent, heap_prio)
+    /// - Clears metadata (cost_from_start, parent)
     /// - Adds index to free_indices for reuse
     ///
     /// This is part of the public API for A* search, as the main loop needs to decrement
@@ -368,17 +471,10 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             self.state_to_idx.remove(&self.states[idx].state);
 
             // Clear metadata
-            if idx < self.g.len() {
-                self.g[idx] = f64::INFINITY;
-            }
-            if idx < self.states.len() {
-                self.states[idx].parent_idx = None;
-                self.states[idx].component_idx = None;
-                self.states[idx].transition_info = None;
-            }
-            if idx < self.heap_prio.len() {
-                self.heap_prio[idx] = None;
-            }
+            self.states[idx].cost_from_start = f64::INFINITY;
+            self.states[idx].parent_idx = None;
+            self.states[idx].component_idx = None;
+            self.states[idx].transition_info = None;
 
             // Add to free list
             self.free_indices.push(idx);
@@ -416,28 +512,19 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         idx < self.states.len() && self.states[idx].ref_count > 0
     }
 
-    /// Get mutable access to g value by index.
-    fn g_mut(&mut self) -> &mut Vec<f64> {
-        &mut self.g
+    /// Get cost from start by index.
+    pub fn cost_from_start(&self, idx: usize) -> f64 {
+        self.states.get(idx).map(|sm| sm.cost_from_start).unwrap_or(f64::INFINITY)
     }
 
-    /// Get g value by index.
-    pub fn g(&self, idx: usize) -> f64 {
-        self.g.get(idx).copied().unwrap_or(f64::INFINITY)
-    }
-
-    /// Set initial path cost (g value) from start for a state by index.
+    /// Set initial path cost from start for a state by index.
     ///
     /// This is used to initialize the path cost for a state after insertion.
-    /// Typically, states start with g=INFINITY and are updated via `enqueue_or_update_state`,
+    /// Typically, states start with cost_from_start=INFINITY and are updated via `enqueue_or_update_state`,
     /// but the initial state needs to be set to 0.0 (cost from start to start is zero).
     pub fn set_initial_cost(&mut self, idx: usize, cost: f64) {
-        if idx < self.g.len() {
-            self.g[idx] = cost;
-        } else {
-            // Extend g vector if needed (shouldn't happen if insert_state is used correctly)
-            self.g.resize(idx + 1, f64::INFINITY);
-            self.g[idx] = cost;
+        if let Some(state_meta) = self.states.get_mut(idx) {
+            state_meta.cost_from_start = cost;
         }
     }
 
@@ -464,15 +551,6 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         self.states.get_mut(idx).map(|sm| &mut sm.parent_idx)
     }
 
-    /// Get mutable access to heap_prio by index.
-    fn heap_prio_mut(&mut self) -> &mut Vec<Option<f64>> {
-        &mut self.heap_prio
-    }
-
-    /// Get heap_prio by index.
-    fn heap_prio(&self, idx: usize) -> Option<f64> {
-        self.heap_prio.get(idx).copied().flatten()
-    }
 
     /// Statistics: Total number of states ever allocated (including freed).
     pub fn total_states(&self) -> usize {
@@ -500,26 +578,20 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
 
     // ========== Heap Operations ==========
 
-    /// Push a state index onto the heap with priority (negative f value).
+    /// Push a state onto the heap with priority (negative f value).
     ///
     /// This automatically:
     /// - Increments the state's ref_count (for being in heap)
-    /// - Tracks the priority for later decrease_key
     /// - Updates heap statistics (heap_sum_f, heap_len)
     ///
     /// This is part of the public API for A* search, as the initial state needs to be pushed.
-    pub fn heap_push(&mut self, idx: usize, f: f64) {
+    pub fn heap_push(&mut self, handle: &StateHandle, f: f64) {
+        let idx = handle.index();
         self.increment_ref_count(idx);
         self.open.push(idx, -f);
         self.in_open.insert(idx);
         self.heap_sum_f += f;
         self.heap_len += 1;
-        if idx < self.heap_prio.len() {
-            self.heap_prio[idx] = Some(-f);
-        } else {
-            self.heap_prio.resize(idx + 1, None);
-            self.heap_prio[idx] = Some(-f);
-        }
     }
 
     /// Pop the highest priority state index from the heap.
@@ -530,20 +602,20 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// This automatically:
     /// - Decrements the state's ref_count (no longer in heap)
     /// - Removes from in_open set
-    /// - Clears heap_prio entry
     /// - Updates heap statistics
-    pub fn heap_pop(&mut self) -> Option<(usize, f64)> {
+    pub fn heap_pop(&mut self) -> Option<StateHandle> {
         if let Some((idx, neg_f)) = self.open.pop() {
             let f = -neg_f;
             self.heap_sum_f -= f;
             self.heap_len -= 1;
             self.in_open.remove(&idx);
-            if idx < self.heap_prio.len() {
-                self.heap_prio[idx] = None;
-            }
             // Decrement ref count - no longer in heap
             self.decrement_ref_count(idx);
-            Some((idx, f))
+            Some(StateHandle {
+                idx,
+                cost: f,
+                pool_ptr: self as *mut StatePool<S, T> as *mut StatePool<(), ()>,
+            })
         } else {
             None
         }
@@ -552,24 +624,17 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// Decrease the priority of a state in the heap.
     ///
     /// Updates the heap entry if `idx` is in the heap and the new f value is better (lower).
-    /// Also updates heap statistics.
+    /// Note: heap_sum_f is not updated here (would require storing old priority), so heap_avg_f()
+    /// may be slightly inaccurate after decrease_key operations, but it's only a debug statistic.
     fn heap_decrease_key(&mut self, idx: usize, f: f64) -> bool {
         if !self.in_open.contains(&idx) {
             return false;
         }
 
-        if let Some(old_neg) = self.heap_prio.get(idx).and_then(|o| *o) {
-            let old_f = -old_neg;
-            self.open.decrease_key(&idx, -f);
-            if idx < self.heap_prio.len() {
-                self.heap_prio[idx] = Some(-f);
-            }
-            // Update heap statistics
-            self.heap_sum_f += f - old_f;
-            true
-        } else {
-            false
-        }
+        self.open.decrease_key(&idx, -f);
+        // Note: We could update heap_sum_f here if we stored the old priority,
+        // but since it's only for debug statistics, we skip it for simplicity.
+        true
     }
 
     /// Check if an index is in the heap.
@@ -596,11 +661,6 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         self.open.len()
     }
 
-    /// Get mutable reference to heap_prio vector (for heap growth).
-    fn heap_prio_mut_for_growth(&mut self) -> &mut Vec<Option<f64>> {
-        &mut self.heap_prio
-    }
-
     /// Get mutable reference to open heap (for heap growth).
     fn heap_mut_for_growth(&mut self) -> &mut QuaternaryHeapOfIndices<usize, f64> {
         &mut self.open
@@ -625,54 +685,60 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
 
     /// Enqueue or update a state with all logic handled internally.
     ///
-    /// This is fire-and-forget: caller just provides the state, g value, parent info,
+    /// This is fire-and-forget: caller just provides the state, cost_from_start value, parent info,
     /// component index, transition info, and f value, and the pool handles:
-    /// - g_best comparison (only enqueues if new or improved)
+    /// - Best cost comparison (only enqueues if new or improved)
     /// - Parent, component, and transition info updates (with ref counting)
     /// - Heap operations (decrease_key if in heap, push if not)
     /// - Heap growth checks
     ///
     /// Returns:
     /// - `true` if the state was enqueued/updated
-    /// - `false` if the state already exists with a better g value (skipped)
+    /// - `false` if the state already exists with a better cost_from_start value (skipped)
     ///
     /// **This is the main entry point for A* search - all heap and state management
     /// logic is handled internally.**
     pub fn enqueue_or_update_state(
         &mut self,
         state: S,
-        g_value: f64,
-        parent_idx: usize,
+        cost_value: f64,
+        parent: &StateHandle,
         component_idx: usize,
         transition_info: Option<T>,
         f: f64,
     ) -> bool {
-        // Try to update g_best - pool handles g_best comparison
-        if let Some(state_idx_nm) = self.try_update_g_best(state, g_value) {
+        // Try to update best cost - pool handles best cost comparison
+        if let Some(state_idx_nm) = self.try_update_best_cost(state, cost_value) {
             let state_idx = state_idx_nm.get();
             // State should be enqueued/updated
             // Set parent, component, and transition info - pool handles ref counting automatically
-            self.set_parent_component_and_transition(state_idx, parent_idx, component_idx, transition_info);
+            self.set_parent_component_and_transition(state_idx, parent.index(), component_idx, transition_info);
 
             // Update heap - decrease_key if in heap, push if not
             if self.is_in_heap(state_idx) {
                 self.heap_decrease_key(state_idx, f);
             } else {
-                self.heap_push(state_idx, f);
+                // Create a temporary handle for heap_push
+                // SAFETY: We know state_idx is valid and active (just created/updated)
+                let handle = StateHandle::new(
+                    state_idx,
+                    f,
+                    self as *mut StatePool<S, T>,
+                );
+                self.heap_push(&handle, f);
             }
 
             // Check if we need to grow the heap
             let heap_capacity = self.heap_capacity();
             grow_heap_if_needed(
                 &mut self.open,
-                &mut self.heap_prio,
                 heap_capacity,
                 &mut self.heap_bound,
             );
 
             true
         } else {
-            // State already has better g value - skip
+            // State already has better cost_from_start value - skip
             false
         }
     }

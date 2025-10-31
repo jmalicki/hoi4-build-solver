@@ -55,9 +55,10 @@ pub unsafe fn grow_heap_vector(open: &mut QuaternaryHeapOfIndices<usize, f64>, n
 ///
 /// Uses unsafe code to access internal Vec and grow it without recreating the heap.
 /// This is much more efficient than extracting all entries and rebuilding.
+///
+/// Note: heap_prio is now stored in state metadata, so it grows automatically with states.
 pub fn grow_heap_if_needed(
     open: &mut QuaternaryHeapOfIndices<usize, f64>,
-    heap_prio: &mut Vec<Option<f64>>,
     states_len: usize,
     heap_bound: &mut usize,
 ) {
@@ -70,9 +71,7 @@ pub fn grow_heap_if_needed(
             grow_heap_vector(open, new_bound);
         }
 
-        // Grow heap_prio to match new bound
-        heap_prio.resize(new_bound, None);
-
+        // heap_prio is stored in states[idx].heap_prio, so it grows automatically with states Vec
         *heap_bound = new_bound;
     }
 }

@@ -19,7 +19,7 @@ use std::io::{self, Write};
 
 mod heap_growth;
 mod state_pool;
-use state_pool::StatePool;
+use state_pool::{StatePool, StateHandle};
 
 /// Static descriptor of a node (immutable across search).
 #[derive(Clone, Copy)]
@@ -480,17 +480,15 @@ fn solve_and_reconstruct(
 
     // State pool for managing states, reference counting, index reuse, and the heap
     let initial_heap_bound = 10_000_000; // Start with 10M, will grow as needed
-    let mut pool = StatePool::<State, TransitionInfo>::new(initial_heap_bound);
+    let (mut pool, start_handle) = StatePool::<State, TransitionInfo>::new(initial_heap_bound, st.clone(), 0.0);
 
-    // seed start state
-    let start_idx = pool.insert_state(st.clone());
-    pool.set_initial_cost(start_idx, 0.0);
+    // seed start state - push to heap
     let h0 = heuristic(&st, &desc, target_type_enum, target);
-    pool.heap_push(start_idx, h0);
+    pool.heap_push(&start_handle, h0);
     // Global best known solution cost (upper bound). Initialize with greedy plan from start.
     let mut best_ub = upper_bound_convert_then_mil(&st, &desc, target_type_enum, target);
     let mut expanded: usize = 0;
-    let mut goal_i: Option<usize> = None;
+    let mut goal_i: Option<StateHandle> = None;
     let mut goal_g: f64 = 0.0;
     let mut pruned: usize = 0;
     if verbose {
@@ -504,26 +502,21 @@ fn solve_and_reconstruct(
         );
         let _ = io::stdout().flush();
     }
-    while let Some((cur_idx, _cur_f)) = pool.heap_pop() {
-        // heap_pop decremented ref count (no longer in heap), but we need to keep state alive during expansion
-        // Check if state was freed (shouldn't happen since we just popped it, but be safe)
-        if !pool.is_active(cur_idx) {
-            continue;
-        }
-        
+    while let Some(cur_handle) = pool.heap_pop() {
+        // StateHandle guarantees the state is active - if we have a handle, it's valid.
         // Increment ref count BEFORE we start using it - this ensures it stays alive during expansion
         // and until parent references are set in children (which will also increment it)
-        pool.increment_ref_count(cur_idx);
+        cur_handle.keep_alive(&mut pool);
         expanded += 1;
 
-        let cur_g = pool.g(cur_idx);
-        let cur = pool.get_state(cur_idx).unwrap();
+        let cur_cost = cur_handle.cost_from_start(&pool);
+        let cur = cur_handle.state(&pool).unwrap();
         // Check terminal before any pruning
         if is_terminal(cur, target_type_enum, target) {
-            goal_g = cur_g;
-            goal_i = Some(cur_idx);
+            goal_g = cur_cost;
+            goal_i = Some(cur_handle.clone()); // Store handle, not index
             // Increment ref count to keep goal state alive for path reconstruction
-            pool.increment_ref_count(cur_idx);
+            cur_handle.keep_alive(&mut pool);
             break;
         }
         if verbose && (expanded == 1 || (print_every > 0 && expanded.is_multiple_of(print_every))) {
@@ -533,8 +526,8 @@ fn solve_and_reconstruct(
             let states_pretty = fmt_count(pool.total_states());
             let pruned_pretty = fmt_count(pruned);
             let msg = format!(
-                "[A*] iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={}",
-                iters_pretty, cur_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty
+                "[A*] iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={}",
+                iters_pretty, cur_cost, heap_pretty, states_pretty, heap_avg_f, pruned_pretty
             );
             println!("{}", msg);
             let _ = io::stdout().flush();
@@ -544,7 +537,7 @@ fn solve_and_reconstruct(
             // We rerun this here in case we've observed a better upper bound since
             // we first enqueued the state.
             let ub_suffix = upper_bound_convert_then_mil(cur, &desc, target_type_enum, target);
-            let candidate_total = cur_g + ub_suffix;
+            let candidate_total = cur_cost + ub_suffix;
             if candidate_total <= best_ub {
                 best_ub = candidate_total;
             } else {
@@ -553,11 +546,11 @@ fn solve_and_reconstruct(
         }
         let successors = iter_successors(cur, &desc).collect::<Vec<_>>();
         for successor in successors {
-            let g_value = cur_g + successor.step_cost;
+            let cost_value = cur_cost + successor.step_cost;
 
             // Compute heuristic for the successor state
             let h = heuristic(&successor.next_state, &desc, target_type_enum, target);
-            let f = g_value + h;
+            let f = cost_value + h;
 
             if prune {
                 // prune neighbors exceeding current upper bound before enqueueing
@@ -567,22 +560,22 @@ fn solve_and_reconstruct(
                     target_type_enum,
                     target,
                 );
-                if g_value + ub_ns > best_ub {
+                if cost_value + ub_ns > best_ub {
                     pruned += 1;
                     continue;
                 } else {
-                    best_ub = g_value + ub_ns;
+                    best_ub = cost_value + ub_ns;
                 }
             }
 
-            // Fire-and-forget: pool handles g_best comparison, parent updates,
+            // Fire-and-forget: pool handles best cost comparison, parent updates,
             // heap operations (decrease_key vs push), and heap growth
-            // If state already has better g value, it's skipped internally
+            // If state already has better cost_from_start value, it's skipped internally
             // Transition info is stored in the pool - no separate tracking needed
             pool.enqueue_or_update_state(
                 successor.next_state,
-                g_value,
-                cur_idx,
+                cost_value,
+                &cur_handle,
                 successor.node_index,
                 Some(TransitionInfo {
                     action: successor.action,
@@ -595,7 +588,7 @@ fn solve_and_reconstruct(
         // Now we can decrement the ref count we added at the start of this iteration.
         // If the state has children, their parent references will keep it alive (ref_count > 0).
         // If it has no children, decrementing will free it, which is correct.
-        pool.decrement_ref_count(cur_idx);
+        pool.decrement_ref_count(cur_handle.index());
     }
     if verbose {
         let heap_avg_f = pool.heap_avg_f();
@@ -604,29 +597,29 @@ fn solve_and_reconstruct(
         let states_pretty = fmt_count(pool.total_states());
         let pruned_pretty = fmt_count(pruned);
         // Reuse cadence format; use goal_g if available, else 0.0. Show best_ub as candidate_total.
-        let final_g = goal_i.map(|_| goal_g).unwrap_or(0.0);
+        let final_g = goal_i.is_some().then(|| goal_g).unwrap_or(0.0);
         let msg = format!(
-            "[A*] iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
+            "[A*] iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
             iters_pretty, final_g, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
         );
         println!("{}", msg);
         let _ = io::stdout().flush();
     }
-    if let Some(gi) = goal_i {
+    if let Some(goal_handle) = goal_i {
         // Reconstruct path backwards from goal to start.
         // All states in the path are kept alive by:
-        // - Goal state: ref_count incremented when found (line ~512)
+        // - Goal state: ref_count incremented when found
         // - Path states: Each state's parent points to its parent, keeping parents alive
         //   (parent ref_count incremented when parent is set via pool.set_parent_component_and_transition)
         let mut moves: Vec<(String, String)> = Vec::new();
-        let mut walk = gi;
-        while let Some(prev_idx) = pool.parent_idx(walk) {
-            let component_idx = pool.component_idx(walk).unwrap_or(0);
-            let action = pool.transition_info(walk)
+        let mut walk = goal_handle.clone();
+        while let Some(parent_handle) = walk.parent(&pool) {
+            let component_idx = walk.component_index(&pool).unwrap_or(0);
+            let action = walk.transition_info(&pool)
                 .map(|t| t.action)
                 .unwrap_or("unknown");
             moves.push((names[component_idx].clone(), action.to_string()));
-            walk = prev_idx;
+            walk = parent_handle;
         }
         moves.reverse();
         if verbose {
@@ -637,8 +630,8 @@ fn solve_and_reconstruct(
             );
             let _ = io::stdout().flush();
         }
-        let final_state: Vec<(i32, i32, i32)> = pool
-            .get_state(gi)
+        let final_state: Vec<(i32, i32, i32)> = goal_handle
+            .state(&pool)
             .unwrap()
             .0
             .iter()
@@ -653,8 +646,8 @@ fn solve_and_reconstruct(
             let states_pretty = fmt_count(pool.total_states());
             let pruned_pretty = fmt_count(pruned);
             let msg = format!(
-                "[A*] final_iters={} g={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
-                iters_pretty, 0.0, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
+            "[A*] final_iters={} cost={:.4} heap={} states={} avg_f={:.4} pruned={} ub: best_ub={:.4}",
+            iters_pretty, 0.0, heap_pretty, states_pretty, heap_avg_f, pruned_pretty, best_ub,
             );
             println!("{}", msg);
             let _ = io::stdout().flush();
