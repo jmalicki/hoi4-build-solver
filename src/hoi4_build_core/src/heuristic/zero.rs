@@ -33,6 +33,6 @@ impl Heuristic for ZeroHeuristic {
 
     fn name(&self) -> &'static str {
         // Use the requested external string name
-        "djikstra"
+        "dijkstra"
     }
 }

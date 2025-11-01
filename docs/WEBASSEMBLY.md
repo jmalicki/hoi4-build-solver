@@ -171,7 +171,7 @@ pub struct SolveOpts {
     pub verbose: bool,
     pub print_every: u32,
     pub prune: bool,
-    pub heuristic: String, // "best_infra_upper_bound", "djikstra", etc.
+    pub heuristic: String, // "best_infra_upper_bound", "dijkstra", etc.
 }
 
 #[cfg(feature = "wasm")]
@@ -192,7 +192,7 @@ Internally, reuse the same search code used by PyO3, with conversions to/from `J
   - Source: Upload CSV file or paste Google Sheet URL
   - Target type: `military | civilian | factories`
   - Target value: numeric
-  - Heuristic: select (default `best_infra_upper_bound`, option `djikstra`)
+  - Heuristic: select (default `best_infra_upper_bound`, option `dijkstra`)
   - Print cadence / pruning toggle
 - Outputs:
   - Progress log (optional)
