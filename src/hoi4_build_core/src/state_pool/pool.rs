@@ -560,14 +560,8 @@ mod tests {
         let parent = pool.make_handle(parent_idx, 0.0);
 
         // First enqueue with estimated_total_cost = 100.0 → stored in heap as -100.0
-        let first = pool.enqueue_or_update_state(
-            state.clone(),
-            100.0,
-            Some(&parent),
-            0,
-            None,
-            100.0,
-        );
+        let first =
+            pool.enqueue_or_update_state(state.clone(), 100.0, Some(&parent), 0, None, 100.0);
         assert!(first, "First enqueue should succeed");
         assert_eq!(pool.heap_size(), 1);
 
@@ -585,10 +579,7 @@ mod tests {
 
         // After the fix, this should succeed without calling decrease_key
         // (because we'll check 105.0 < 100.0 before calling decrease_key)
-        assert!(
-            second,
-            "Second enqueue should succeed (path_cost improved)"
-        );
+        assert!(second, "Second enqueue should succeed (path_cost improved)");
 
         // Verify path_cost was updated
         let state_idx = pool.get_index(&state).expect("State should exist");
