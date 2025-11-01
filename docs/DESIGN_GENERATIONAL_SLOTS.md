@@ -66,7 +66,7 @@ impl GenerationalIndex {
 }
 ```
 
-### Slot<T>
+### Slot&lt;T&gt;
 
 A single slot in the storage:
 

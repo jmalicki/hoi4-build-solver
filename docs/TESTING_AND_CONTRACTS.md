@@ -116,14 +116,14 @@ This allows O(1) checks to run in production while O(n) checks are compiled out.
 
 ## When to Use Each Type
 
-### Use O(1) Checks For:
+### Use O(1) Checks For
 
 - Input validation (bounds, null checks, valid ranges)
 - Output validation (expected properties, return value ranges)
 - Critical invariants that must hold in production
 - Fast membership/equality checks
 
-### Use O(n) Checks For:
+### Use O(n) Checks For
 
 - Full data structure consistency verification
 - Cross-reference validation (e.g., ensuring all states in heap are also in index map)

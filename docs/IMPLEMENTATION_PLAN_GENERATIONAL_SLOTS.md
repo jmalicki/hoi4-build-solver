@@ -65,6 +65,7 @@ Before starting:
    - Test edge cases (max u32 values, zero generation)
 
 5. **Run checks**
+
    ```bash
    cd src/hoi4_build_core
    cargo fmt
@@ -114,11 +115,11 @@ No functional changes yet - this is infrastructure only.
 
 ### Implementation Steps
 
-1. **Implement Slot<T> and SlotMetadata**
+1. **Implement Slot&lt;T&gt; and SlotMetadata**
    - Copy from design document
    - Keep `SlotMetadata` simple for now (can expand later)
 
-2. **Implement GenerationalSlotStorage<T>**
+2. **Implement GenerationalSlotStorage&lt;T&gt;**
    - Implement `new()` constructor
    - Implement `allocate()` - reuse free slots, increment generation
    - Implement `free()` - validate generation, return data
@@ -136,6 +137,7 @@ No functional changes yet - this is infrastructure only.
    - Test edge cases (free already-freed slot, get invalid index)
 
 4. **Run checks**
+
    ```bash
    cd src/hoi4_build_core
    cargo fmt
@@ -321,6 +323,7 @@ Part of phased migration to eliminate ref counting complexity.
    - Test stale entry skipping works correctly
 
 4. **Run checks**
+
    ```bash
    cd src/hoi4_build_core
    cargo fmt
@@ -389,6 +392,7 @@ Ref counting still needed for parent relationships (independent lifetimes).
    - Consider if `Rc<StateHandle>` would be simpler (see RAII_REFACTORING_ANALYSIS.md)
 
 4. **Run checks**
+
    ```bash
    cd src/hoi4_build_core
    cargo fmt
@@ -531,6 +535,7 @@ Breaking changes: None (internal implementation change only).
    - Verify no dead code
 
 6. **Run final checks**
+
    ```bash
    cd src/hoi4_build_core
    cargo fmt
