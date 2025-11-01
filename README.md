@@ -101,7 +101,9 @@ hoi4-build-solve \
 - `--target`: Target value for the selected target type
 - `--moves-out`: Output CSV path for the action sequence
 - `--final-out`: Output CSV path for the final node states
-- `--heuristic`: Heuristic to use - accepts five case-insensitive choices: `best_infra_upper_bound` (default), `standard` (alias for `best_infra_upper_bound`), or `zero`, `dijkstra`, `djikstra` (interchangeable options for zero heuristic, no heuristic)
+- `--heuristic`: Heuristic to use - accepts five case-insensitive choices: `best_infra_upper_bound` (default),
+  `standard` (alias for `best_infra_upper_bound`), or `zero`, `dijkstra`, `djikstra` (interchangeable options for zero
+  heuristic)
 - `--no-prune`: Disable upper-bound pruning (pruning enabled by default)
 - `--verbose`/`--quiet`: Control progress output (default: verbose)
 - `--print-every`: Print progress every N iterations (default: 10000, set to 0 to disable)
