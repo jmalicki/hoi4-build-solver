@@ -487,8 +487,8 @@ mod tests {
     #[cfg(test)]
     mod astar_invariant_tests {
         use super::*;
-        use crate::heuristic::create_by_name;
         use crate::TransitionInfo;
+        use crate::heuristic::create_by_name;
 
         // Test helpers
         fn make_desc() -> Vec<NodeDesc> {
@@ -538,7 +538,8 @@ mod tests {
 
                 let cur_cost = cur_handle.cost_from_start(&pool);
                 let cur_state = cur_handle.state(&pool).unwrap().clone();
-                let h = heuristic_impl.lower_bound(&cur_state, &desc, crate::TargetType::Military, 2);
+                let h =
+                    heuristic_impl.lower_bound(&cur_state, &desc, crate::TargetType::Military, 2);
                 let cur_f = cur_cost + h;
 
                 // Check invariant: current f should be <= all previous f values
@@ -555,8 +556,12 @@ mod tests {
                 // Generate successors and check heap ordering
                 for successor in crate::iter_successors(&cur_state, &desc) {
                     let successor_cost = cur_cost + successor.step_cost;
-                    let successor_h =
-                        heuristic_impl.lower_bound(&successor.next_state, &desc, crate::TargetType::Military, 2);
+                    let successor_h = heuristic_impl.lower_bound(
+                        &successor.next_state,
+                        &desc,
+                        crate::TargetType::Military,
+                        2,
+                    );
                     let successor_f = successor_cost + successor_h;
 
                     pool.enqueue_or_update_state(
@@ -619,15 +624,11 @@ mod tests {
             // and that we can get the state from the heap
             // Note: We can't directly check the index, but we can verify behavior
             let handle2 = pool.heap_pop();
-            assert!(
-                handle2.is_some(),
-                "State should be in heap after update"
-            );
+            assert!(handle2.is_some(), "State should be in heap after update");
             if let Some(h) = handle2 {
                 let updated_cost = h.cost_from_start(&pool);
                 assert_eq!(
-                    updated_cost,
-                    50.0,
+                    updated_cost, 50.0,
                     "Cost should be updated to better value 50.0, but got {}",
                     updated_cost
                 );
@@ -682,8 +683,7 @@ mod tests {
             }
 
             assert_eq!(
-                state1_count,
-                1,
+                state1_count, 1,
                 "State should appear exactly once in heap, but appears {} times",
                 state1_count
             );
@@ -779,8 +779,12 @@ mod tests {
                 let successors = crate::iter_successors(&cur_state, &desc);
                 for successor in successors {
                     let successor_cost = cur_cost + successor.step_cost;
-                    let successor_h =
-                        heuristic_impl.lower_bound(&successor.next_state, &desc, target_type, target);
+                    let successor_h = heuristic_impl.lower_bound(
+                        &successor.next_state,
+                        &desc,
+                        target_type,
+                        target,
+                    );
                     let successor_f = successor_cost + successor_h;
 
                     pool.enqueue_or_update_state(
@@ -815,7 +819,10 @@ mod tests {
                     );
                 }
             } else {
-                panic!("Test should find a goal within {} expansions", MAX_EXPANSIONS);
+                panic!(
+                    "Test should find a goal within {} expansions",
+                    MAX_EXPANSIONS
+                );
             }
         }
 
@@ -892,7 +899,8 @@ mod tests {
             let target = 2;
 
             // Get exact optimal cost
-            let exact_cost = crate::core::exact_solver::exact_optimal_cost(&desc, &start, target_type, target);
+            let exact_cost =
+                crate::core::exact_solver::exact_optimal_cost(&desc, &start, target_type, target);
             assert!(
                 exact_cost.is_some(),
                 "Exact solver should find solution for this test case"
