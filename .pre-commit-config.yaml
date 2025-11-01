@@ -92,6 +92,13 @@ repos:
       - id: commitlint
         name: commitlint (conventional)
         stages: [commit-msg]
-        entry: bash -lc 'npx --yes @commitlint/cli -x @commitlint/config-conventional -e'
+        entry: >
+          bash -lc
+          'if command -v npx > /dev/null 2>&1; then
+            npx --yes @commitlint/cli -x @commitlint/config-conventional -e;
+          else
+            echo "Skipping commitlint: npx not found";
+            exit 0;
+          fi'
         language: system
         pass_filenames: false
