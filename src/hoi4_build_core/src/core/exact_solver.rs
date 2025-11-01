@@ -27,15 +27,22 @@ impl PartialEq for StateCost {
 impl PartialOrd for StateCost {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Reverse order for min-heap (lowest cost first)
-        other.cost.partial_cmp(&self.cost)
+        // Canonical pattern: call cmp for Ord types
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for StateCost {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse order for min-heap (lowest cost first)
-        // Use partial_cmp which handles f64 comparison
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        // Compare costs directly (f64 comparison)
+        match other.cost.partial_cmp(&self.cost) {
+            Some(ordering) => ordering,
+            None => {
+                // If costs are incomparable (NaN), order by state
+                self.state.cmp(&other.state)
+            }
+        }
     }
 }
 
