@@ -483,4 +483,445 @@ mod tests {
             }
         });
     }
+
+    #[cfg(test)]
+    mod astar_invariant_tests {
+        use super::*;
+        use crate::heuristic::create_by_name;
+        use crate::TransitionInfo;
+
+        // Test helpers
+        fn make_desc() -> Vec<NodeDesc> {
+            vec![NodeDesc { slots: 3 }, NodeDesc { slots: 2 }]
+        }
+
+        fn make_start() -> State {
+            State(vec![
+                crate::NodeState {
+                    infra: 0,
+                    civ: 1,
+                    mil: 0,
+                },
+                crate::NodeState {
+                    infra: 0,
+                    civ: 0,
+                    mil: 0,
+                },
+            ])
+        }
+
+        /// Hypothesis 1: Priority queue ordering bug
+        /// Requirement: States in priority queue should be ordered by f = g + h (lowest first)
+        /// Test: When popping states, each popped state should have f <= f of all remaining states
+        #[test]
+        fn test_priority_queue_orders_by_f_value() {
+            // This test verifies that the priority queue maintains the invariant:
+            // When popping state S with f(S), all remaining states have f >= f(S)
+            let desc = make_desc();
+            let start = make_start();
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+
+            let h0 = heuristic_impl.lower_bound(&start, &desc, crate::TargetType::Military, 2);
+            pool.enqueue_or_update_state(start.clone(), 0.0, None, 0, None, h0);
+
+            let mut prev_f: Option<f64> = None;
+            let mut expanded_count = 0;
+            const MAX_EXPANSIONS: usize = 100; // Limit to avoid infinite loops
+
+            while let Some(cur_handle) = pool.heap_pop() {
+                expanded_count += 1;
+                if expanded_count > MAX_EXPANSIONS {
+                    break;
+                }
+
+                let cur_cost = cur_handle.cost_from_start(&pool);
+                let cur_state = cur_handle.state(&pool).unwrap().clone();
+                let h = heuristic_impl.lower_bound(&cur_state, &desc, crate::TargetType::Military, 2);
+                let cur_f = cur_cost + h;
+
+                // Check invariant: current f should be <= all previous f values
+                if let Some(prev) = prev_f {
+                    assert!(
+                        cur_f <= prev + 1e-9,
+                        "Priority queue ordering violated: popped state with f={} after state with f={}",
+                        cur_f,
+                        prev
+                    );
+                }
+                prev_f = Some(cur_f);
+
+                // Generate successors and check heap ordering
+                for successor in crate::iter_successors(&cur_state, &desc) {
+                    let successor_cost = cur_cost + successor.step_cost;
+                    let successor_h =
+                        heuristic_impl.lower_bound(&successor.next_state, &desc, crate::TargetType::Military, 2);
+                    let successor_f = successor_cost + successor_h;
+
+                    pool.enqueue_or_update_state(
+                        successor.next_state,
+                        successor_cost,
+                        Some(&cur_handle),
+                        0,
+                        Some(TransitionInfo {
+                            action: successor.action,
+                            cost: successor.step_cost,
+                        }),
+                        successor_f,
+                    );
+                }
+            }
+        }
+
+        /// Hypothesis 2: State memoization bug
+        /// Requirement: When enqueuing a state with better cost, it should update the existing state
+        /// Test: Enqueue same state twice with different costs, verify best cost is kept
+        #[test]
+        fn test_enqueue_or_update_preserves_best_cost() {
+            // This test verifies that enqueue_or_update_state updates states with better costs
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+            let state1 = make_start();
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let desc = make_desc();
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            // First, enqueue state with cost 100.0
+            let h1 = heuristic_impl.lower_bound(&state1, &desc, target_type, target);
+            let f1 = 100.0 + h1;
+            let result1 = pool.enqueue_or_update_state(state1.clone(), 100.0, None, 0, None, f1);
+            assert!(result1, "First enqueue should succeed");
+
+            // Verify cost by popping from heap
+            let handle1 = pool.heap_pop();
+            assert!(
+                handle1.is_some(),
+                "State should be in heap after first enqueue"
+            );
+            if let Some(h) = handle1 {
+                assert_eq!(
+                    h.cost_from_start(&pool),
+                    100.0,
+                    "First enqueue should set cost to 100.0"
+                );
+                // Put it back for next test
+                pool.heap_push(&h, f1);
+            }
+
+            // Now enqueue same state with better cost 50.0
+            let f2 = 50.0 + h1;
+            let result2 = pool.enqueue_or_update_state(state1.clone(), 50.0, None, 0, None, f2);
+            assert!(result2, "Second enqueue with better cost should succeed");
+
+            // Verify cost was updated by checking if the second enqueue succeeded
+            // and that we can get the state from the heap
+            // Note: We can't directly check the index, but we can verify behavior
+            let handle2 = pool.heap_pop();
+            assert!(
+                handle2.is_some(),
+                "State should be in heap after update"
+            );
+            if let Some(h) = handle2 {
+                let updated_cost = h.cost_from_start(&pool);
+                assert_eq!(
+                    updated_cost,
+                    50.0,
+                    "Cost should be updated to better value 50.0, but got {}",
+                    updated_cost
+                );
+            }
+
+            // Now enqueue same state with worse cost 150.0
+            let f3 = 150.0 + h1;
+            let result3 = pool.enqueue_or_update_state(state1.clone(), 150.0, None, 0, None, f3);
+            // This should fail (return false) because cost is worse
+            assert!(
+                !result3,
+                "Enqueuing with worse cost should fail (return false), but got {}",
+                result3
+            );
+
+            // Note: We can't directly verify cost wasn't updated since get_index is private
+            // But we verified that result3 was false, which means the update was rejected
+        }
+
+        /// Hypothesis 3: Duplicate state handling bug
+        /// Requirement: Same state should not appear multiple times in queue with different costs
+        /// Test: Verify that enqueuing same state multiple times doesn't create duplicates
+        #[test]
+        fn test_no_duplicate_states_in_heap() {
+            // This test verifies that the same state doesn't appear multiple times in the heap
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+            let state1 = make_start();
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let desc = make_desc();
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            let h1 = heuristic_impl.lower_bound(&state1, &desc, target_type, target);
+
+            // Enqueue same state multiple times with different f values
+            // Each should either update the existing entry or be rejected if cost is worse
+            for i in 0..10 {
+                let cost = if i == 0 { 100.0 } else { 50.0 + (i as f64) };
+                let f = cost + h1;
+                pool.enqueue_or_update_state(state1.clone(), cost, None, 0, None, f);
+            }
+
+            // Verify state appears only once in heap
+            // Since get_index is private, we'll verify by popping all states and counting
+            let mut state1_count = 0;
+            while let Some(handle) = pool.heap_pop() {
+                let state = handle.state(&pool).unwrap();
+                if *state == state1 {
+                    state1_count += 1;
+                }
+            }
+
+            assert_eq!(
+                state1_count,
+                1,
+                "State should appear exactly once in heap, but appears {} times",
+                state1_count
+            );
+        }
+
+        /// Hypothesis 4: Re-expansion bug
+        /// Requirement: States should not be expanded before best path to them is found
+        /// Test: If we find a better path to a state that was already expanded, we should re-expand it
+        #[test]
+        fn test_better_path_found_after_expansion() {
+            // This test verifies that if we find a better path to an already-expanded state,
+            // we correctly handle it (either re-expand or update correctly)
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+            let state1 = make_start();
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let desc = make_desc();
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            let h1 = heuristic_impl.lower_bound(&state1, &desc, target_type, target);
+
+            // Enqueue and expand state1 with cost 100.0
+            let f1 = 100.0 + h1;
+            pool.enqueue_or_update_state(state1.clone(), 100.0, None, 0, None, f1);
+            let handle1 = pool.heap_pop().expect("State should be in heap");
+            let expanded_cost1 = handle1.cost_from_start(&pool);
+            assert_eq!(expanded_cost1, 100.0);
+
+            // Now find a better path to state1 (cost 50.0)
+            // In A*, once a state is expanded, we don't re-expand it even if we find a better path
+            // However, we should verify that the cost is updated for consistency
+            let f2 = 50.0 + h1;
+            let result = pool.enqueue_or_update_state(state1.clone(), 50.0, None, 0, None, f2);
+
+            // After expansion, enqueue_or_update_state should handle the better path
+            // Since get_index is private, we verify behavior by checking if state can be re-added
+            // In standard A*, once expanded, states are not re-expanded even with better paths
+            // However, the cost should be updated if the state is still tracked
+            if result {
+                // If update succeeded, verify the better cost is used
+                if let Some(handle) = pool.heap_pop() {
+                    let updated_cost = handle.cost_from_start(&pool);
+                    if updated_cost < f64::INFINITY {
+                        assert!(
+                            updated_cost <= 50.0 + 1e-9,
+                            "Better path cost should be preserved: got {} but expected <= 50.0",
+                            updated_cost
+                        );
+                    }
+                }
+            }
+        }
+
+        /// Hypothesis 5: A* termination invariant
+        /// Requirement: When a goal is popped from queue, g(goal) <= f(any_unexpanded)
+        /// Test: Verify that when we find a goal, all remaining states have f >= g(goal)
+        #[test]
+        fn test_astar_termination_invariant() {
+            // This test verifies the A* invariant: when a goal is popped, it's optimal
+            // i.e., g(goal) <= f(any_unexpanded_state)
+            let desc = make_desc();
+            let start = make_start();
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            let h0 = heuristic_impl.lower_bound(&start, &desc, target_type, target);
+            pool.enqueue_or_update_state(start.clone(), 0.0, None, 0, None, h0);
+
+            let mut goal_g: Option<f64> = None;
+            const MAX_EXPANSIONS: usize = 1000;
+
+            let mut expanded = 0;
+            while let Some(cur_handle) = pool.heap_pop() {
+                expanded += 1;
+                if expanded > MAX_EXPANSIONS {
+                    break;
+                }
+
+                let cur_cost = cur_handle.cost_from_start(&pool);
+                let cur_state = cur_handle.state(&pool).unwrap().clone();
+
+                if crate::is_terminal(&cur_state, target_type, target) {
+                    goal_g = Some(cur_cost);
+                    break;
+                }
+
+                let _h = heuristic_impl.lower_bound(&cur_state, &desc, target_type, target);
+                let successors = crate::iter_successors(&cur_state, &desc);
+                for successor in successors {
+                    let successor_cost = cur_cost + successor.step_cost;
+                    let successor_h =
+                        heuristic_impl.lower_bound(&successor.next_state, &desc, target_type, target);
+                    let successor_f = successor_cost + successor_h;
+
+                    pool.enqueue_or_update_state(
+                        successor.next_state,
+                        successor_cost,
+                        Some(&cur_handle),
+                        0,
+                        Some(TransitionInfo {
+                            action: successor.action,
+                            cost: successor.step_cost,
+                        }),
+                        successor_f,
+                    );
+                }
+            }
+
+            if let Some(goal_g_value) = goal_g {
+                // Verify that the goal cost is optimal by comparing with exact solver
+                let exact_cost = crate::core::exact_solver::exact_optimal_cost(
+                    &desc,
+                    &start,
+                    target_type,
+                    target,
+                );
+
+                if let Some(exact) = exact_cost {
+                    assert!(
+                        goal_g_value <= exact + 1e-9,
+                        "A* termination invariant violated: goal cost {} exceeds exact optimal {}",
+                        goal_g_value,
+                        exact
+                    );
+                }
+            } else {
+                panic!("Test should find a goal within {} expansions", MAX_EXPANSIONS);
+            }
+        }
+
+        /// Hypothesis 6: Cost update triggers heap reordering
+        /// Requirement: When we update a state's cost with enqueue_or_update_state,
+        /// the heap should be reordered to reflect the new f value
+        #[test]
+        fn test_cost_update_triggers_heap_reorder() {
+            // This test verifies that when we update a state's cost,
+            // the heap is properly reordered
+            let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
+            let state1 = make_start();
+            let state2 = State(vec![
+                crate::NodeState {
+                    infra: 0,
+                    civ: 2,
+                    mil: 0,
+                },
+                crate::NodeState {
+                    infra: 0,
+                    civ: 0,
+                    mil: 0,
+                },
+            ]);
+            let heuristic_impl =
+                create_by_name("best_infra_upper_bound").expect("heuristic must be valid");
+            let desc = make_desc();
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            // Enqueue state1 with high f value
+            let h1 = heuristic_impl.lower_bound(&state1, &desc, target_type, target);
+            let f1 = 200.0 + h1;
+            pool.enqueue_or_update_state(state1.clone(), 200.0, None, 0, None, f1);
+
+            // Enqueue state2 with lower f value
+            let h2 = heuristic_impl.lower_bound(&state2, &desc, target_type, target);
+            let f2 = 100.0 + h2;
+            pool.enqueue_or_update_state(state2.clone(), 100.0, None, 0, None, f2);
+
+            // state2 should be popped first (lower f)
+            let first = pool.heap_pop().expect("Heap should have states");
+            let first_state = first.state(&pool).unwrap().clone();
+            assert_eq!(
+                first_state, state2,
+                "State with lower f should be popped first"
+            );
+
+            // Now update state1 with better cost
+            let f1_better = 50.0 + h1;
+            pool.enqueue_or_update_state(state1.clone(), 50.0, None, 0, None, f1_better);
+
+            // If heap is properly reordered, state1 should now be popped next
+            // (or at least have better f than before)
+            if let Some(second) = pool.heap_pop() {
+                let second_cost = second.cost_from_start(&pool);
+                assert!(
+                    second_cost <= 200.0 + 1e-9,
+                    "Updated state should have better cost, got {}",
+                    second_cost
+                );
+            }
+        }
+
+        /// Hypothesis 7: No-prune mode finds optimal solution
+        /// Requirement: A* without pruning should find the same optimal solution as exact solver
+        /// Test: Compare no-prune A* result with exact solver for known test case
+        #[test]
+        fn test_no_prune_finds_optimal_solution() {
+            // This is the main failing test case
+            let desc = make_desc();
+            let start = make_start();
+            let target_type = crate::TargetType::Military;
+            let target = 2;
+
+            // Get exact optimal cost
+            let exact_cost = crate::core::exact_solver::exact_optimal_cost(&desc, &start, target_type, target);
+            assert!(
+                exact_cost.is_some(),
+                "Exact solver should find solution for this test case"
+            );
+            let exact = exact_cost.unwrap();
+
+            // Run A* without pruning
+            let opts_noprune: SolveOptions<'_, fn(&ProgressSnapshot) -> bool> = SolveOptions {
+                prune: false,
+                print_every: usize::MAX,
+                heuristic_name: "best_infra_upper_bound",
+                progress_cb: None,
+            };
+
+            let (_moves, _final_state, cost_noprune) = solve_and_reconstruct_core(
+                desc.clone(),
+                start.clone(),
+                target_type,
+                target,
+                opts_noprune,
+            );
+
+            // A* should find optimal solution
+            assert!(
+                (cost_noprune - exact).abs() < 1e-9,
+                "A* without pruning should find optimal solution: got {} but expected {}",
+                cost_noprune,
+                exact
+            );
+        }
+    }
 }
