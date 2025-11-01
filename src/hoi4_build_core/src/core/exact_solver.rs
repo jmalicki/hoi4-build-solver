@@ -34,10 +34,8 @@ impl PartialOrd for StateCost {
 impl Ord for StateCost {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse order for min-heap (lowest cost first)
-        match self.partial_cmp(other) {
-            Some(ordering) => ordering,
-            None => Ordering::Equal,
-        }
+        // Use partial_cmp which handles f64 comparison
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
     }
 }
 
@@ -54,6 +52,7 @@ const MAX_STATES: usize = 10_000;
 ///
 /// This solver is only intended for very small instances (≤2 nodes, ≤3 slots, ≤2 target)
 /// to validate heuristic admissibility. For larger instances, it will return `None`.
+#[allow(private_interfaces)]
 pub fn exact_optimal_cost(
     desc: &[NodeDesc],
     start: &State,
