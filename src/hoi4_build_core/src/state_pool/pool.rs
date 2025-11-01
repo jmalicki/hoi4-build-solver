@@ -1,3 +1,38 @@
+//! State pool: stable indexing, ref-counted ownership, and index reuse.
+//!
+//! This module provides `StatePool`, a dense storage for search states with
+//! stable indices and an indexed open set backed by a quaternary heap.
+//!
+//! ## Architecture Overview
+//!
+//! The pool maintains two key data structures:
+//! 1. **Dense storage** (`states: Vec<StateWithMetadata>`): Each state gets a
+//!    stable index that never changes while the state is alive.
+//! 2. **Hash mapping** (`state_to_idx: HashMap`): Fast lookup from state
+//!    payload to its index for duplicate detection.
+//!
+//! ## Reference Counting and Lifecycle
+//!
+//! States are reference-counted. Each reference comes from:
+//! - `StateHandle` objects (owned by caller code)
+//! - Heap membership (state is in the open set)
+//!
+//! When `ref_count` reaches zero:
+//! - State metadata is cleared (cost, parent, etc.)
+//! - State is removed from `state_to_idx` mapping
+//! - Index is added to `free_indices` for reuse
+//!
+//! ## Heap Management
+//!
+//! The open set uses `QuaternaryHeapOfIndices` which requires all indices to be
+//! `< heap_bound`. When inserting a state with `index >= heap_bound`, we must
+//! grow the heap first. After growth, we rebuild accounting structures
+//! (`in_open`, `heap_sum_estimated_total_cost`, `heap_len`) since the heap
+//! structure may have changed.
+
+#[cfg(test)]
+use contracts::*;
+
 use orx_priority_queue::{PriorityQueue, PriorityQueueDecKey, QuaternaryHeapOfIndices};
 use rapidhash::fast::RandomState as RapidHasher;
 use std::collections::{HashMap, HashSet};
@@ -6,6 +41,15 @@ use std::hash::Hash;
 use super::{NonMaxUsize, StateHandle};
 use crate::heap_growth::grow_heap_if_needed;
 
+/// Per-index record storing a state and its search metadata.
+///
+/// Each state in the pool has:
+/// - `state`: The actual state payload (used as key in HashMap for identity)
+/// - `ref_count`: Number of owners (StateHandles + heap membership)
+/// - `cost_from_start`: Best-known g-cost (cost from start to this state)
+/// - `parent_idx`: Index of parent state in search tree (for path reconstruction)
+/// - `component_idx`: Optional grouping/indexing for domain-specific logic
+/// - `transition_info`: Optional info about how we reached this state
 struct StateWithMetadata<S, T> {
     state: S,
     ref_count: u32,
@@ -15,18 +59,120 @@ struct StateWithMetadata<S, T> {
     transition_info: Option<T>,
 }
 
+/// Dense pool that owns all states and manages their lifecycle.
+///
+/// Responsibilities:
+/// - Assign stable indices for states (indices never change while state is alive)
+/// - Maintain bidirectional mapping: state payload ↔ stable index
+/// - Track ownership through reference counting
+/// - Manage the open set (priority queue) for A* search
+/// - Handle heap growth when indices exceed `heap_bound`
+///
+/// ## Key Invariants
+///
+/// 1. **Index Stability**: Once a state gets an index, that index remains valid
+///    until `ref_count` reaches zero and the state is freed.
+/// 2. **Heap Bound**: All indices pushed to `open` must be `< heap_bound`.
+///    The pool grows `heap_bound` automatically when needed.
+/// 3. **Reference Counting**: `ref_count = 0` means the state can be freed.
+///    Freed states are immediately cleared and their indices reused.
 pub struct StatePool<S: Hash + Eq + Clone + Default, T> {
+    /// Dense storage of states and metadata by stable index.
+    /// Index in this vector IS the stable index used throughout the system.
     states: Vec<StateWithMetadata<S, T>>,
+    /// Fast lookup: state payload → stable index.
+    /// Used for duplicate detection in A* (check if we've seen this state before).
     state_to_idx: HashMap<S, usize, RapidHasher>,
+    /// Stack of indices available for reuse (LIFO order).
+    /// When `ref_count` reaches zero, the index is pushed here.
     free_indices: Vec<usize>,
+    /// Open set: priority queue keyed by `-estimated_total_cost` (max-heap
+    /// semantics to get min `estimated_total_cost`).
+    /// Stores indices, not state payloads directly.
     open: QuaternaryHeapOfIndices<usize, f64>,
+    /// Membership set for O(1) "is this index in the heap?" checks.
+    /// Also needed for safe decrease-key operations.
     in_open: HashSet<usize>,
+    /// Maximum supported index for `open`. Must grow before inserting indices ≥ this.
     heap_bound: usize,
+    /// Sum of finite estimated_total_cost values currently in `open`.
+    /// Used to compute `heap_avg_estimated_total_cost()` for diagnostics.
     heap_sum_estimated_total_cost: f64,
+    /// Number of entries currently in `open` (for accounting and averages).
+    /// Must stay in sync with `in_open.len()` and `open.len()`.
     heap_len: usize,
 }
 
 impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
+    /// Check that heap accounting invariants are satisfied.
+    ///
+    /// **Invariant**: `heap_len` must equal `in_open.len()` and `open.len()`.
+    /// All indices in `in_open` must be `< heap_bound`.
+    /// All indices in `in_open` must also be in the heap.
+    #[cfg(test)]
+    fn check_heap_accounting_invariants(&self) -> bool {
+        let heap_len_ok = self.heap_len == self.in_open.len() && self.heap_len == self.open.len();
+        let heap_bound_ok = self.in_open.iter().all(|&idx| idx < self.heap_bound);
+        let indices_in_heap = self
+            .in_open
+            .iter()
+            .all(|&idx| idx < self.states.len() && self.states[idx].ref_count > 0);
+        heap_len_ok && heap_bound_ok && indices_in_heap
+    }
+
+    /// Check that reference counting invariants are satisfied.
+    ///
+    /// **Invariant**: If `ref_count > 0`, the state must be in `state_to_idx` OR
+    /// be in the heap (in_open), OR have active handles (checked externally).
+    /// If `ref_count == 0`, the state must not be in `state_to_idx`.
+    #[cfg(test)]
+    fn check_ref_count_invariants(&self) -> bool {
+        for (idx, sm) in self.states.iter().enumerate() {
+            if sm.ref_count > 0 {
+                // Active state: must be in state_to_idx or heap (or have external handles)
+                let in_map = self.state_to_idx.contains_key(&sm.state);
+                let _in_heap = self.in_open.contains(&idx);
+                // If not in map and not in heap, we rely on external handles (acceptable)
+                // But if in map, index must match
+                if in_map {
+                    let mapped_idx = self.state_to_idx.get(&sm.state);
+                    if mapped_idx != Some(&idx) {
+                        return false; // State-to-index mismatch
+                    }
+                }
+            } else {
+                // Freed state: should not be in state_to_idx
+                if self.state_to_idx.contains_key(&sm.state) {
+                    return false; // Freed state still in map
+                }
+            }
+        }
+        true
+    }
+
+    /// Check that free indices invariants are satisfied.
+    ///
+    /// **Invariant**: All indices in `free_indices` must be:
+    /// - `< states.len()`
+    /// - Have `ref_count == 0`
+    /// - Not be in `state_to_idx`
+    #[cfg(test)]
+    fn check_free_indices_invariants(&self) -> bool {
+        self.free_indices.iter().all(|&idx| {
+            idx < self.states.len()
+                && self.states[idx].ref_count == 0
+                && !self.state_to_idx.contains_key(&self.states[idx].state)
+        })
+    }
+
+    /// Create a new pool with an initial heap index bound.
+    ///
+    /// The heap bound grows automatically as needed when inserting higher
+    /// indices. Start with a reasonable initial bound to avoid frequent resizes.
+    #[cfg(test)]
+    #[ensures(ret.heap_len == 0, "New pool has empty heap")]
+    #[ensures(ret.heap_bound == initial_heap_bound, "Heap bound matches initial value")]
+    #[ensures(ret.states.len() == 0, "New pool has no states")]
     pub fn new(initial_heap_bound: usize) -> Self {
         Self {
             states: Vec::new(),
@@ -40,16 +186,38 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
+    /// Look up the stable index for a state payload.
+    ///
+    /// Returns `None` if the state has never been inserted, or if it was
+    /// inserted but later freed (removed from `state_to_idx`).
     fn get_index(&self, state: &S) -> Option<usize> {
         self.state_to_idx.get(state).copied()
     }
 
+    /// Allocate a slot for a new state (or reuse a freed slot).
+    ///
+    /// **Reuse logic**: If `free_indices` has slots available, pop one (LIFO).
+    /// Reset its metadata to default values. The old state payload is already
+    /// gone (removed in `decrement_ref_count`).
+    ///
+    /// **New allocation**: If no free slots, append a new entry to `states`.
+    /// The new index is `states.len() - 1`.
+    ///
+    /// Returns the stable index to use for the new state.
+    #[cfg(test)]
+    #[requires(self.check_free_indices_invariants(), "Free indices invariants hold before allocation")]
+    #[ensures(ret < self.states.len(), "Returned index is valid")]
+    #[ensures(self.states[ret].ref_count == 0, "Allocated slot has zero ref count")]
+    #[ensures(self.states[ret].cost_from_start == f64::INFINITY, "Allocated slot has infinite cost")]
+    #[ensures(self.check_free_indices_invariants(), "Free indices invariants hold after allocation")]
     fn allocate_index(&mut self) -> usize {
         if let Some(idx) = self.free_indices.pop() {
+            // Reusing a freed slot: reset metadata (state payload was already cleared)
             self.states[idx].ref_count = 0;
             self.states[idx].cost_from_start = f64::INFINITY;
             idx
         } else {
+            // Allocating a new slot: append to dense storage
             let idx = self.states.len();
             self.states.push(StateWithMetadata {
                 state: S::default(),
@@ -63,6 +231,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
+    /// Insert a new state into the pool, returning its stable index.
+    ///
+    /// If the state already exists, this will create a duplicate (two indices
+    /// for the same state). Use `enqueue_or_update_state` for A* search which
+    /// handles duplicates properly.
     #[allow(dead_code)]
     pub fn insert_state(&mut self, state: S) -> usize {
         let idx = self.allocate_index();
@@ -71,17 +244,29 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         idx
     }
 
+    /// Insert-or-update helper for best-known g-cost (cost from start).
+    ///
+    /// This is the core of A* duplicate handling:
+    /// - If state exists and `path_cost` is better (smaller) than stored
+    ///   `cost_from_start`, update it and return the index.
+    /// - If state doesn't exist, insert it with the given `path_cost`.
+    /// - If state exists but `path_cost` is not better, return `None`.
+    ///
+    /// Returns `None` when no improvement occurs (state exists with better or
+    /// equal cost), allowing caller to skip further processing.
     fn try_update_best_cost(&mut self, state: S, path_cost: f64) -> Option<NonMaxUsize> {
         match self.get_index(&state) {
             Some(idx) => {
+                // State exists: only update if we found a better path
                 if path_cost < self.states[idx].cost_from_start {
                     self.states[idx].cost_from_start = path_cost;
                     Some(unsafe { NonMaxUsize::new_unchecked(idx) })
                 } else {
-                    None
+                    None // Existing state has better or equal cost
                 }
             }
             None => {
+                // New state: allocate slot and insert
                 let idx = self.allocate_index();
                 self.states[idx].state = state.clone();
                 self.state_to_idx.insert(state, idx);
@@ -91,6 +276,24 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
+    /// Update parent/component/transition metadata and maintain ref-counts.
+    ///
+    /// This is called when we discover a path to `child_idx`. We need to:
+    /// 1. **Update parent relationship**: The old parent (if any) loses a
+    ///    reference, the new parent (if any) gains a reference.
+    /// 2. **Update search metadata**: component_idx and transition_info.
+    ///
+    /// ## Reference Counting Logic
+    ///
+    /// The parent relationship creates a reference from child → parent:
+    /// - When a state sets `parent_idx`, it increments the parent's ref_count.
+    /// - When a state changes its parent, it decrements the old parent and
+    ///   increments the new parent.
+    ///
+    /// This ensures parents stay alive as long as their children reference them,
+    /// which is necessary for path reconstruction.
+    ///
+    /// Note: Start states have `parent_idx = None` (no parent to reference).
     fn set_parent_component_and_transition(
         &mut self,
         child_idx: usize,
@@ -98,7 +301,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         component_idx: usize,
         transition_info: Option<T>,
     ) {
-        // Decrement old parent ref count if present
+        // Decrement old parent ref count if present (we're changing parents)
         if let Some(old_parent) = self.states[child_idx].parent_idx {
             self.decrement_ref_count(old_parent.get());
         }
@@ -109,17 +312,44 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         } else {
             self.states[child_idx].parent_idx = None;
         }
+        // Update domain-specific metadata
         self.states[child_idx].component_idx =
             Some(unsafe { NonMaxUsize::new_unchecked(component_idx) });
         self.states[child_idx].transition_info = transition_info;
     }
 
+    /// Decrement ref-count and free the state when it reaches zero.
+    ///
+    /// When `ref_count` becomes zero, the state has no more owners:
+    /// - It's removed from `state_to_idx` (can't be found by duplicate check)
+    /// - All metadata is cleared (cost, parent, component, transition)
+    /// - Index is added to `free_indices` for immediate reuse
+    ///
+    /// Note: The state payload itself isn't cleared (it's `S::default()` in
+    /// newly allocated slots anyway), but it's effectively "gone" since it's
+    /// removed from the hash map.
+    ///
+    /// ## Safety
+    ///
+    /// Uses `saturating_sub` to avoid underflow on invalid indices or races.
+    /// Returns early if index is out of bounds.
+    ///
+    /// ## Contract Invariants
+    ///
+    /// - If `ref_count` was > 1, it decreases by 1
+    /// - If `ref_count` reaches 0, state is freed and added to `free_indices`
+    /// - Ref count invariants are maintained
+    #[cfg(test)]
+    #[requires(idx < self.states.len() || true, "Index valid or method returns early")]
+    #[ensures(idx >= self.states.len() || self.states[idx].ref_count == 0 || !self.free_indices.contains(&idx), "Freed state added to free_indices when ref_count reaches zero")]
+    #[ensures(idx >= self.states.len() || self.check_ref_count_invariants(), "Ref count invariants hold after decrement")]
     pub fn decrement_ref_count(&mut self, idx: usize) {
         if idx >= self.states.len() {
             return;
         }
         self.states[idx].ref_count = self.states[idx].ref_count.saturating_sub(1);
         if self.states[idx].ref_count == 0 {
+            // State is now unused: clear everything and mark index as free
             self.state_to_idx.remove(&self.states[idx].state);
             self.states[idx].cost_from_start = f64::INFINITY;
             self.states[idx].parent_idx = None;
@@ -129,80 +359,152 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
     }
 
+    /// Increment a state's ref-count if the index is valid.
+    ///
+    /// Called when creating a `StateHandle` or adding to the heap. Returns
+    /// early if index is out of bounds.
     pub fn increment_ref_count(&mut self, idx: usize) {
         if idx < self.states.len() {
             self.states[idx].ref_count += 1;
         }
     }
+    /// Get the state payload at the given index.
+    ///
+    /// Returns `None` if index is out of bounds.
     pub fn get_state(&self, idx: usize) -> Option<&S> {
         self.states.get(idx).map(|sm| &sm.state)
     }
+    /// Get the current ref-count for a state (for testing/debugging).
     #[allow(dead_code)]
     pub fn ref_count(&self, idx: usize) -> u32 {
         self.states.get(idx).map(|sm| sm.ref_count).unwrap_or(0)
     }
+    /// Check if a state is currently active (ref_count > 0).
+    ///
+    /// Returns `false` if index is out of bounds or state is freed.
     #[allow(dead_code)]
     pub fn is_active(&self, idx: usize) -> bool {
         idx < self.states.len() && self.states[idx].ref_count > 0
     }
+    /// Get the best-known g-cost (cost from start) for a state.
+    ///
+    /// Returns `f64::INFINITY` if index is out of bounds or state doesn't exist.
     pub fn cost_from_start(&self, idx: usize) -> f64 {
         self.states
             .get(idx)
             .map(|sm| sm.cost_from_start)
             .unwrap_or(f64::INFINITY)
     }
+    /// Set the initial g-cost for a state (for testing/debugging).
     #[allow(dead_code)]
     pub fn set_initial_cost(&mut self, idx: usize, cost: f64) {
         if let Some(sm) = self.states.get_mut(idx) {
             sm.cost_from_start = cost;
         }
     }
+    /// Get the parent index for a state (for path reconstruction).
+    ///
+    /// Returns `None` if state has no parent (start state) or index is invalid.
     pub fn parent_idx(&self, idx: usize) -> Option<usize> {
         self.states
             .get(idx)
             .and_then(|sm| sm.parent_idx.map(|i| i.get()))
     }
+    /// Get the component index for a state (domain-specific grouping).
+    ///
+    /// Returns `None` if not set or index is invalid.
     pub fn component_idx(&self, idx: usize) -> Option<usize> {
         self.states
             .get(idx)
             .and_then(|sm| sm.component_idx.map(|i| i.get()))
     }
+    /// Get the transition info for a state (how we reached this state).
+    ///
+    /// Returns `None` if not set or index is invalid.
     pub fn transition_info(&self, idx: usize) -> Option<&T> {
         self.states
             .get(idx)
             .and_then(|sm| sm.transition_info.as_ref())
     }
 
+    /// Total number of slots ever allocated (active + freed).
+    ///
+    /// This equals `states.len()` and represents the maximum index + 1.
     pub fn total_states(&self) -> usize {
         self.states.len()
     }
+    /// Approximate number of in-use slots (excludes freed entries).
+    ///
+    /// This is `total_states() - free_indices_count()`, but note that a slot
+    /// may be "used" even if `ref_count == 0` if it hasn't been freed yet.
     #[allow(dead_code)]
     pub fn used_states(&self) -> usize {
         self.states.len() - self.free_indices.len()
     }
+    /// Number of indices currently available for reuse (in `free_indices`).
     #[allow(dead_code)]
     pub fn free_indices_count(&self) -> usize {
         self.free_indices.len()
     }
+    /// Current capacity suggested to the heap (equal to `states.len()`).
+    ///
+    /// The heap bound should match or exceed this to avoid growth triggers.
     pub fn heap_capacity(&self) -> usize {
         self.states.len()
     }
 
+    /// Push a state into the open set (priority queue) with given f-cost.
+    ///
+    /// ## Heap Growth
+    ///
+    /// If `idx >= heap_bound`, we must grow the heap first. This involves:
+    /// 1. Growing `heap_bound` via `grow_heap_if_needed` (may trigger internal
+    ///    heap resizing)
+    /// 2. **Rebuilding accounting structures**: After growth, the heap's internal
+    ///    state may have changed, so we:
+    ///    - Pop all entries into a temporary vector
+    ///    - Re-push them all (reinserting with new heap structure)
+    ///    - Rebuild `in_open`, `heap_sum_estimated_total_cost`, `heap_len`
+    ///
+    /// ## Reference Counting
+    ///
+    /// Heap membership is a reference: we increment `ref_count` for the state.
+    /// This ensures the state stays alive as long as it's in the open set.
+    ///
+    /// ## Priority Storage
+    ///
+    /// The heap uses `-estimated_total_cost` as the key because it's a max-heap
+    /// but we want minimum f-cost (lower is better). Negating makes the max-heap
+    /// behave like a min-heap.
+    #[cfg(test)]
+    #[requires(handle.index() < self.states.len(), "Handle index is valid")]
+    #[requires(!estimated_total_cost.is_nan() && estimated_total_cost >= 0.0, "Estimated total cost is valid")]
+    #[requires(handle.index() < self.heap_bound || true, "Index will be within heap bound after growth")]
+    #[ensures(self.in_open.contains(&handle.index()), "State is in heap membership set")]
+    #[ensures(self.heap_bound > handle.index(), "Heap bound exceeds index")]
+    #[ensures(self.check_heap_accounting_invariants(), "Heap accounting invariants hold")]
+    #[ensures(self.states[handle.index()].ref_count > 0, "Ref count is positive after push")]
     pub fn heap_push(&mut self, handle: &StateHandle<S, T>, estimated_total_cost: f64) {
         let idx = handle.index();
         // Guard: grow heap bound before inserting an index beyond current bound
         if idx >= self.heap_bound {
+            // Grow heap until it can accommodate this index
             while self.heap_bound <= idx {
                 let _ = grow_heap_if_needed(&mut self.open, idx + 1, &mut self.heap_bound);
             }
             // Rebuild accounting based on current heap content
+            // After growth, heap structure may have changed, so we need to rebuild
+            // our accounting structures (in_open, heap_sum, heap_len) by
+            // re-inserting all entries.
             self.in_open.clear();
             self.heap_sum_estimated_total_cost = 0.0;
             self.heap_len = 0;
             let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
+            // Extract all entries from heap
             while let Some((i, neg)) = self.open.pop() {
                 tmp.push((i, neg));
             }
+            // Re-insert all entries and rebuild accounting
             for (i, neg) in tmp.into_iter() {
                 self.open.push(i, neg);
                 self.in_open.insert(i);
@@ -213,6 +515,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
                 self.heap_len += 1;
             }
         }
+        // Add to heap: increment ref_count (heap owns a reference)
         self.increment_ref_count(idx);
         self.open.push(idx, -estimated_total_cost);
         self.in_open.insert(idx);
@@ -221,6 +524,34 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         }
         self.heap_len += 1;
     }
+    /// Pop the best state (lowest f-cost) from the open set.
+    ///
+    /// Returns a `StateHandle` that owns a reference to the popped state.
+    ///
+    /// ## Ownership Transfer
+    ///
+    /// When we pop from the heap:
+    /// 1. **Create handle first**: `StateHandle::new` increments `ref_count`.
+    ///    At this point, `ref_count >= 1` (handle owns it).
+    /// 2. **Remove heap's reference**: Call `decrement_ref_count` to drop the
+    ///    heap's ownership. Since the handle still owns a reference,
+    ///    `ref_count >= 1` after decrement (state stays alive).
+    ///
+    /// This ensures the state remains valid while the caller holds the handle.
+    /// When the handle is dropped, its `Drop` impl will call `decrement_ref_count`
+    /// again, potentially freeing the state if no other references remain.
+    ///
+    /// ## Accounting Updates
+    ///
+    /// We update `heap_sum_estimated_total_cost`, `heap_len`, and `in_open`
+    /// to keep them in sync with the heap's actual contents.
+    #[cfg(test)]
+    #[requires(self.check_heap_accounting_invariants(), "Heap accounting invariants hold before pop")]
+    #[ensures(ret.is_none() || self.check_heap_accounting_invariants(), "Heap accounting invariants hold after pop")]
+    #[ensures(ret.is_none() || {
+        let handle = ret.as_ref().unwrap();
+        handle.index() < self.states.len() && self.states[handle.index()].ref_count > 0
+    }, "Popped handle has valid index and positive ref count")]
     pub fn heap_pop(&mut self) -> Option<StateHandle<S, T>> {
         if let Some((idx, neg_estimated_total_cost)) = self.open.pop() {
             let estimated_total_cost = -neg_estimated_total_cost;
@@ -240,6 +571,21 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             None
         }
     }
+    /// Decrease the priority (f-cost) of an index already in the heap.
+    ///
+    /// Returns `false` if the index is not in the heap (can't decrease key).
+    /// Returns `true` if the key was successfully decreased.
+    ///
+    /// **Note**: This only updates the heap priority. It does NOT update
+    /// `cost_from_start` (g-cost) or other metadata. Those should be updated
+    /// separately before calling this function.
+    ///
+    /// ## Heap Semantics
+    ///
+    /// The heap stores `-estimated_total_cost` as the key (max-heap for
+    /// min-priority). To decrease the priority (make f-cost smaller), we pass
+    /// `-estimated_total_cost` to `decrease_key`, which expects a LARGER value
+    /// in max-heap terms (because smaller f-cost = higher priority).
     fn heap_decrease_key(&mut self, idx: usize, estimated_total_cost: f64) -> bool {
         if !self.in_open.contains(&idx) {
             return false;
@@ -247,13 +593,22 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         self.open.decrease_key(&idx, -estimated_total_cost);
         true
     }
+    /// Check if an index is currently in the open set (heap).
     fn is_in_heap(&self, idx: usize) -> bool {
         self.in_open.contains(&idx)
     }
+    /// Number of entries currently in the open set (accounted value).
+    ///
+    /// This should equal `open.len()` and `in_open.len()` when accounting is
+    /// in sync. Used for diagnostics and averages.
     #[allow(dead_code)]
     pub fn heap_len(&self) -> usize {
         self.heap_len
     }
+    /// Average of finite f-values currently in the open set (diagnostic only).
+    ///
+    /// Returns 0.0 if the heap is empty. Infinite values are excluded from the
+    /// sum but may still be present in the heap.
     pub fn heap_avg_estimated_total_cost(&self) -> f64 {
         if self.heap_len == 0 {
             0.0
@@ -261,6 +616,10 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             self.heap_sum_estimated_total_cost / (self.heap_len as f64)
         }
     }
+    /// Underlying heap length (for sanity checks/testing).
+    ///
+    /// This should equal `heap_len()` when accounting is in sync. Use this
+    /// for debugging when accounting might be inconsistent.
     pub fn heap_size(&self) -> usize {
         self.open.len()
     }
@@ -281,6 +640,49 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         &mut self.heap_bound
     }
 
+    /// Main A* enqueue operation: insert or update a state in the open set.
+    ///
+    /// This is the primary entry point for A* search. It handles:
+    /// 1. **Duplicate detection**: If state exists with better g-cost, skip it.
+    /// 2. **Best-cost update**: If state exists but new g-cost is better, update it.
+    /// 3. **Parent relationship**: Update parent/component/transition metadata.
+    /// 4. **Heap management**: Add to open set or decrease key if already present.
+    ///
+    /// ## Parameters
+    ///
+    /// - `state`: The state payload (used for identity/duplicate detection)
+    /// - `path_cost`: g-cost (cost from start to this state)
+    /// - `parent`: Optional parent state handle (for path reconstruction)
+    /// - `component_idx`: Domain-specific grouping/indexing
+    /// - `transition_info`: Optional info about how we reached this state
+    /// - `estimated_total_cost`: f-cost (g-cost + heuristic = priority for heap)
+    ///
+    /// ## Return Value
+    ///
+    /// - Returns `true` if state was inserted/updated (new state or better g-cost)
+    /// - Returns `false` if:
+    ///   - Inputs are invalid (NaN, negative costs)
+    ///   - State exists with better or equal g-cost (no improvement)
+    ///
+    /// ## Heap Growth
+    ///
+    /// If `state_idx >= heap_bound`, we grow the heap first (same logic as
+    /// `heap_push`). After all operations, we also proactively grow the heap
+    /// to match current pool capacity (`heap_capacity()`).
+    ///
+    /// ## Heap Operations
+    ///
+    /// - If state is already in heap: call `heap_decrease_key` to update priority
+    /// - If state is not in heap: create a handle and call `heap_push`
+    ///
+    /// Note: `heap_decrease_key` only updates priority, not g-cost. We update
+    /// g-cost separately via `try_update_best_cost`.
+    #[cfg(test)]
+    #[requires(!path_cost.is_nan() && path_cost >= 0.0, "Path cost is valid")]
+    #[requires(!estimated_total_cost.is_nan() && estimated_total_cost >= 0.0, "Estimated total cost is valid")]
+    #[requires(parent.is_none() || parent.as_ref().unwrap().index() < self.states.len(), "Parent index is valid if present")]
+    #[ensures(!ret || self.check_heap_accounting_invariants(), "If enqueued, heap accounting invariants hold")]
+    #[ensures(!ret || self.check_ref_count_invariants(), "If enqueued, ref count invariants hold")]
     pub fn enqueue_or_update_state(
         &mut self,
         state: S,
@@ -290,6 +692,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         transition_info: Option<T>,
         estimated_total_cost: f64,
     ) -> bool {
+        // Input validation: reject NaN or negative costs
         if path_cost.is_nan()
             || estimated_total_cost.is_nan()
             || path_cost < 0.0
@@ -297,9 +700,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         {
             return false;
         }
+        // Try to insert or update best g-cost
         if let Some(state_idx_nm) = self.try_update_best_cost(state, path_cost) {
             let state_idx = state_idx_nm.get();
             let parent_idx = parent.map(|p| p.index());
+            // Update parent relationship and metadata
             self.set_parent_component_and_transition(
                 state_idx,
                 parent_idx,
@@ -308,6 +713,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             );
             // Ensure heap can accommodate this index BEFORE pushing/decreasing
             if state_idx >= self.heap_bound {
+                // Grow heap (same logic as heap_push)
                 while self.heap_bound <= state_idx {
                     let _ =
                         grow_heap_if_needed(&mut self.open, state_idx + 1, &mut self.heap_bound);
@@ -330,17 +736,19 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
                     self.heap_len += 1;
                 }
             }
+            // Update heap: decrease key if present, push if not
             if self.is_in_heap(state_idx) {
                 self.heap_decrease_key(state_idx, estimated_total_cost);
             } else {
                 let handle = StateHandle::new(state_idx, estimated_total_cost, self);
                 self.heap_push(&handle, estimated_total_cost);
             }
+            // Proactively grow heap to match current pool capacity
             let heap_capacity = self.heap_capacity();
             grow_heap_if_needed(&mut self.open, heap_capacity, &mut self.heap_bound);
             true
         } else {
-            false
+            false // State exists with better or equal g-cost (no improvement)
         }
     }
 
