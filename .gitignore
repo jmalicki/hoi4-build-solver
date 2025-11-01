@@ -6,6 +6,14 @@ src/*/target/
 **/__pycache__/
 *.pyc
 
+# Node modules and npm cache
+node_modules/
+.cache/
+**/.cache/
+
+# Prettier cache (should not be checked in)
+**/.prettier-caches/
+
 # macOS
 .DS_Store
 
