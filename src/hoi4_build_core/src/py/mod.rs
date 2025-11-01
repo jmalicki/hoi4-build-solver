@@ -21,7 +21,7 @@ struct PyProgressSnapshot {
     #[pyo3(get)]
     total_states: usize,
     #[pyo3(get)]
-    avg_f: f64,
+    avg_estimated_total_cost: f64,
     #[pyo3(get)]
     pruned: usize,
     #[pyo3(get)]
@@ -110,7 +110,7 @@ fn solve_and_reconstruct(
                 cost_from_start: snap.cost_from_start,
                 heap_size: snap.heap_size,
                 total_states: snap.total_states,
-                avg_f: snap.avg_f,
+                avg_estimated_total_cost: snap.avg_estimated_total_cost,
                 pruned: snap.pruned,
                 best_upper_bound: snap.best_upper_bound,
             };

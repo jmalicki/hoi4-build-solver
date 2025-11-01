@@ -22,7 +22,7 @@ pub struct StatePool<S: Hash + Eq + Clone + Default, T> {
     open: QuaternaryHeapOfIndices<usize, f64>,
     in_open: HashSet<usize>,
     heap_bound: usize,
-    heap_sum_f: f64,
+    heap_sum_estimated_total_cost: f64,
     heap_len: usize,
 }
 
@@ -35,7 +35,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             open: QuaternaryHeapOfIndices::with_index_bound(initial_heap_bound),
             in_open: HashSet::new(),
             heap_bound: initial_heap_bound,
-            heap_sum_f: 0.0,
+            heap_sum_estimated_total_cost: 0.0,
             heap_len: 0,
         }
     }
@@ -71,11 +71,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         idx
     }
 
-    fn try_update_best_cost(&mut self, state: S, cost_value: f64) -> Option<NonMaxUsize> {
+    fn try_update_best_cost(&mut self, state: S, path_cost: f64) -> Option<NonMaxUsize> {
         match self.get_index(&state) {
             Some(idx) => {
-                if cost_value < self.states[idx].cost_from_start {
-                    self.states[idx].cost_from_start = cost_value;
+                if path_cost < self.states[idx].cost_from_start {
+                    self.states[idx].cost_from_start = path_cost;
                     Some(unsafe { NonMaxUsize::new_unchecked(idx) })
                 } else {
                     None
@@ -85,7 +85,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
                 let idx = self.allocate_index();
                 self.states[idx].state = state.clone();
                 self.state_to_idx.insert(state, idx);
-                self.states[idx].cost_from_start = cost_value;
+                self.states[idx].cost_from_start = path_cost;
                 Some(unsafe { NonMaxUsize::new_unchecked(idx) })
             }
         }
@@ -188,7 +188,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
         self.states.len()
     }
 
-    pub fn heap_push(&mut self, handle: &StateHandle<S, T>, f: f64) {
+    pub fn heap_push(&mut self, handle: &StateHandle<S, T>, estimated_total_cost: f64) {
         let idx = handle.index();
         // Guard: grow heap bound before inserting an index beyond current bound
         if idx >= self.heap_bound {
@@ -197,7 +197,7 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             }
             // Rebuild accounting based on current heap content
             self.in_open.clear();
-            self.heap_sum_f = 0.0;
+            self.heap_sum_estimated_total_cost = 0.0;
             self.heap_len = 0;
             let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
             while let Some((i, neg)) = self.open.pop() {
@@ -206,45 +206,45 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
             for (i, neg) in tmp.into_iter() {
                 self.open.push(i, neg);
                 self.in_open.insert(i);
-                let f_i = -neg;
-                if f_i.is_finite() {
-                    self.heap_sum_f += f_i;
+                let estimated_total_cost_i = -neg;
+                if estimated_total_cost_i.is_finite() {
+                    self.heap_sum_estimated_total_cost += estimated_total_cost_i;
                 }
                 self.heap_len += 1;
             }
         }
         self.increment_ref_count(idx);
-        self.open.push(idx, -f);
+        self.open.push(idx, -estimated_total_cost);
         self.in_open.insert(idx);
-        if f.is_finite() {
-            self.heap_sum_f += f;
+        if estimated_total_cost.is_finite() {
+            self.heap_sum_estimated_total_cost += estimated_total_cost;
         }
         self.heap_len += 1;
     }
     pub fn heap_pop(&mut self) -> Option<StateHandle<S, T>> {
-        if let Some((idx, neg_f)) = self.open.pop() {
-            let f = -neg_f;
+        if let Some((idx, neg_estimated_total_cost)) = self.open.pop() {
+            let estimated_total_cost = -neg_estimated_total_cost;
             // Transfer ownership: first create a handle (increments ref_count),
             // then drop the heap's reference (decrement).
-            let handle = StateHandle::new(idx, f, self);
-            if f.is_finite() {
-                self.heap_sum_f -= f;
+            let handle = StateHandle::new(idx, estimated_total_cost, self);
+            if estimated_total_cost.is_finite() {
+                self.heap_sum_estimated_total_cost -= estimated_total_cost;
             }
             self.heap_len -= 1;
             self.in_open.remove(&idx);
             // Decrement heap membership reference; since the handle was just created,
-            // ref_count stays > 0 and metadata (including g) is preserved.
+            // ref_count stays > 0 and metadata (including path_cost) is preserved.
             self.decrement_ref_count(idx);
             Some(handle)
         } else {
             None
         }
     }
-    fn heap_decrease_key(&mut self, idx: usize, f: f64) -> bool {
+    fn heap_decrease_key(&mut self, idx: usize, estimated_total_cost: f64) -> bool {
         if !self.in_open.contains(&idx) {
             return false;
         }
-        self.open.decrease_key(&idx, -f);
+        self.open.decrease_key(&idx, -estimated_total_cost);
         true
     }
     fn is_in_heap(&self, idx: usize) -> bool {
@@ -254,11 +254,11 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn heap_len(&self) -> usize {
         self.heap_len
     }
-    pub fn heap_avg_f(&self) -> f64 {
+    pub fn heap_avg_estimated_total_cost(&self) -> f64 {
         if self.heap_len == 0 {
             0.0
         } else {
-            self.heap_sum_f / (self.heap_len as f64)
+            self.heap_sum_estimated_total_cost / (self.heap_len as f64)
         }
     }
     pub fn heap_size(&self) -> usize {
@@ -284,16 +284,20 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     pub fn enqueue_or_update_state(
         &mut self,
         state: S,
-        cost_value: f64,
+        path_cost: f64,
         parent: Option<&StateHandle<S, T>>,
         component_idx: usize,
         transition_info: Option<T>,
-        f: f64,
+        estimated_total_cost: f64,
     ) -> bool {
-        if cost_value.is_nan() || f.is_nan() || cost_value < 0.0 || f < 0.0 {
+        if path_cost.is_nan()
+            || estimated_total_cost.is_nan()
+            || path_cost < 0.0
+            || estimated_total_cost < 0.0
+        {
             return false;
         }
-        if let Some(state_idx_nm) = self.try_update_best_cost(state, cost_value) {
+        if let Some(state_idx_nm) = self.try_update_best_cost(state, path_cost) {
             let state_idx = state_idx_nm.get();
             let parent_idx = parent.map(|p| p.index());
             self.set_parent_component_and_transition(
@@ -310,27 +314,27 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
                 }
                 // Rebuild accounting structures after growth
                 self.in_open.clear();
-                self.heap_sum_f = 0.0;
+                self.heap_sum_estimated_total_cost = 0.0;
                 self.heap_len = 0;
                 let mut tmp: Vec<(usize, f64)> = Vec::with_capacity(self.open.len());
-                while let Some((idx, neg_f)) = self.open.pop() {
-                    tmp.push((idx, neg_f));
+                while let Some((idx, neg_estimated_total_cost)) = self.open.pop() {
+                    tmp.push((idx, neg_estimated_total_cost));
                 }
-                for (idx, neg_f) in tmp.into_iter() {
-                    self.open.push(idx, neg_f);
+                for (idx, neg_estimated_total_cost) in tmp.into_iter() {
+                    self.open.push(idx, neg_estimated_total_cost);
                     self.in_open.insert(idx);
-                    let f = -neg_f;
-                    if f.is_finite() {
-                        self.heap_sum_f += f;
+                    let estimated_total_cost = -neg_estimated_total_cost;
+                    if estimated_total_cost.is_finite() {
+                        self.heap_sum_estimated_total_cost += estimated_total_cost;
                     }
                     self.heap_len += 1;
                 }
             }
             if self.is_in_heap(state_idx) {
-                self.heap_decrease_key(state_idx, f);
+                self.heap_decrease_key(state_idx, estimated_total_cost);
             } else {
-                let handle = StateHandle::new(state_idx, f, self);
-                self.heap_push(&handle, f);
+                let handle = StateHandle::new(state_idx, estimated_total_cost, self);
+                self.heap_push(&handle, estimated_total_cost);
             }
             let heap_capacity = self.heap_capacity();
             grow_heap_if_needed(&mut self.open, heap_capacity, &mut self.heap_bound);

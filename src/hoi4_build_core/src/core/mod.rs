@@ -10,7 +10,7 @@ pub struct ProgressSnapshot {
     pub cost_from_start: f64,
     pub heap_size: usize,
     pub total_states: usize,
-    pub avg_f: f64,
+    pub avg_estimated_total_cost: f64,
     pub pruned: usize,
     pub best_upper_bound: f64,
 }
@@ -36,14 +36,21 @@ where
     let heuristic_impl = create_by_name(opts.heuristic_name).expect("heuristic must be valid");
     // Smaller initial heap bound to help surface growth-related issues sooner during debugging
     let mut pool = StatePool::<State, super::TransitionInfo>::new(100_000);
-    let h0 = heuristic_impl.lower_bound(&start, &desc, target_type, target);
-    pool.enqueue_or_update_state(start.clone(), 0.0, None, 0, None, h0);
+    let initial_heuristic_estimate = heuristic_impl.lower_bound(&start, &desc, target_type, target);
+    pool.enqueue_or_update_state(
+        start.clone(),
+        0.0, // path_cost from start is 0
+        None,
+        0,
+        None,
+        initial_heuristic_estimate, // estimated_total_cost = path_cost + heuristic_estimate
+    );
     let mut best_ub = heuristic_impl.upper_bound(&start, &desc, target_type, target);
     #[cfg(debug_assertions)]
     let mut prev_best_ub: Option<f64> = None;
     let mut expanded: usize = 0;
     let mut goal_i: Option<StateHandle<State, super::TransitionInfo>> = None;
-    let mut goal_g: f64 = 0.0;
+    let mut goal_path_cost: f64 = 0.0;
     let mut pruned: usize = 0;
 
     while let Some(cur_handle) = pool.heap_pop() {
@@ -52,7 +59,7 @@ where
         let cur_cost = cur_handle.cost_from_start(&pool);
         let cur_state = cur_handle.state(&pool).unwrap().clone();
         if is_terminal(&cur_state, target_type, target) {
-            goal_g = cur_cost;
+            goal_path_cost = cur_cost;
             goal_i = Some(cur_handle);
             break;
         }
@@ -65,7 +72,7 @@ where
                 cost_from_start: cur_cost,
                 heap_size: pool.heap_size(),
                 total_states: pool.total_states(),
-                avg_f: pool.heap_avg_f(),
+                avg_estimated_total_cost: pool.heap_avg_estimated_total_cost(),
                 pruned,
                 best_upper_bound: best_ub,
             };
@@ -121,17 +128,18 @@ where
         }
         let successors = super::iter_successors(&cur_state, &desc).collect::<Vec<_>>();
         for successor in successors {
-            let cost_value = cur_cost + successor.step_cost;
-            let h = heuristic_impl.lower_bound(&successor.next_state, &desc, target_type, target);
+            let path_cost = cur_cost + successor.step_cost;
+            let heuristic_estimate =
+                heuristic_impl.lower_bound(&successor.next_state, &desc, target_type, target);
             if opts.prune {
                 let ub_ns =
                     heuristic_impl.upper_bound(&successor.next_state, &desc, target_type, target);
-                if cost_value + ub_ns > best_ub {
+                if path_cost + ub_ns > best_ub {
                     pruned += 1;
                     continue;
                 } else {
                     let old_best_ub = best_ub;
-                    best_ub = cost_value + ub_ns;
+                    best_ub = path_cost + ub_ns;
                     #[cfg(debug_assertions)]
                     {
                         if let Some(prev) = prev_best_ub {
@@ -152,16 +160,17 @@ where
                     }
                 }
             }
+            let estimated_total_cost = path_cost + heuristic_estimate;
             pool.enqueue_or_update_state(
                 successor.next_state,
-                cost_value,
+                path_cost,
                 Some(&cur_handle),
                 successor.node_index,
                 Some(super::TransitionInfo {
                     action: successor.action,
                     cost: successor.step_cost,
                 }),
-                cost_value + h,
+                estimated_total_cost,
             );
         }
     }
@@ -180,7 +189,7 @@ where
             walk = parent_handle;
         }
         moves.reverse();
-        (moves, final_state, goal_g)
+        (moves, final_state, goal_path_cost)
     } else {
         // Exhausted; return empty plan and start state with 0 cost
         (Vec::new(), start, 0.0)
