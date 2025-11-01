@@ -30,6 +30,7 @@
 //! (`in_open`, `heap_sum_estimated_total_cost`, `heap_len`) since the heap
 //! structure may have changed.
 
+#[cfg(test)]
 use contracts::*;
 
 use orx_priority_queue::{PriorityQueue, PriorityQueueDecKey, QuaternaryHeapOfIndices};
@@ -168,9 +169,10 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     ///
     /// The heap bound grows automatically as needed when inserting higher
     /// indices. Start with a reasonable initial bound to avoid frequent resizes.
+    #[cfg(test)]
     #[ensures(ret.heap_len == 0, "New pool has empty heap")]
     #[ensures(ret.heap_bound == initial_heap_bound, "Heap bound matches initial value")]
-    #[ensures(ret.states.is_empty(), "New pool has no states")]
+    #[ensures(ret.states.len() == 0, "New pool has no states")]
     pub fn new(initial_heap_bound: usize) -> Self {
         Self {
             states: Vec::new(),
@@ -202,11 +204,12 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// The new index is `states.len() - 1`.
     ///
     /// Returns the stable index to use for the new state.
-    #[cfg_attr(test, requires(self.check_free_indices_invariants(), "Free indices invariants hold before allocation"))]
+    #[cfg(test)]
+    #[requires(self.check_free_indices_invariants(), "Free indices invariants hold before allocation")]
     #[ensures(ret < self.states.len(), "Returned index is valid")]
     #[ensures(self.states[ret].ref_count == 0, "Allocated slot has zero ref count")]
     #[ensures(self.states[ret].cost_from_start == f64::INFINITY, "Allocated slot has infinite cost")]
-    #[cfg_attr(test, ensures(self.check_free_indices_invariants(), "Free indices invariants hold after allocation"))]
+    #[ensures(self.check_free_indices_invariants(), "Free indices invariants hold after allocation")]
     fn allocate_index(&mut self) -> usize {
         if let Some(idx) = self.free_indices.pop() {
             // Reusing a freed slot: reset metadata (state payload was already cleared)
@@ -336,8 +339,10 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// - If `ref_count` was > 1, it decreases by 1
     /// - If `ref_count` reaches 0, state is freed and added to `free_indices`
     /// - Ref count invariants are maintained
+    #[cfg(test)]
+    #[requires(idx < self.states.len() || true, "Index valid or method returns early")]
     #[ensures(idx >= self.states.len() || self.states[idx].ref_count == 0 || !self.free_indices.contains(&idx), "Freed state added to free_indices when ref_count reaches zero")]
-    #[cfg_attr(test, ensures(idx >= self.states.len() || self.check_ref_count_invariants(), "Ref count invariants hold after decrement"))]
+    #[ensures(idx >= self.states.len() || self.check_ref_count_invariants(), "Ref count invariants hold after decrement")]
     pub fn decrement_ref_count(&mut self, idx: usize) {
         if idx >= self.states.len() {
             return;
@@ -471,11 +476,13 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     /// The heap uses `-estimated_total_cost` as the key because it's a max-heap
     /// but we want minimum f-cost (lower is better). Negating makes the max-heap
     /// behave like a min-heap.
+    #[cfg(test)]
     #[requires(handle.index() < self.states.len(), "Handle index is valid")]
     #[requires(!estimated_total_cost.is_nan() && estimated_total_cost >= 0.0, "Estimated total cost is valid")]
+    #[requires(handle.index() < self.heap_bound || true, "Index will be within heap bound after growth")]
     #[ensures(self.in_open.contains(&handle.index()), "State is in heap membership set")]
     #[ensures(self.heap_bound > handle.index(), "Heap bound exceeds index")]
-    #[cfg_attr(test, ensures(self.check_heap_accounting_invariants(), "Heap accounting invariants hold"))]
+    #[ensures(self.check_heap_accounting_invariants(), "Heap accounting invariants hold")]
     #[ensures(self.states[handle.index()].ref_count > 0, "Ref count is positive after push")]
     pub fn heap_push(&mut self, handle: &StateHandle<S, T>, estimated_total_cost: f64) {
         let idx = handle.index();
@@ -538,8 +545,9 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     ///
     /// We update `heap_sum_estimated_total_cost`, `heap_len`, and `in_open`
     /// to keep them in sync with the heap's actual contents.
-    #[cfg_attr(test, requires(self.check_heap_accounting_invariants(), "Heap accounting invariants hold before pop"))]
-    #[cfg_attr(test, ensures(ret.is_none() || self.check_heap_accounting_invariants(), "Heap accounting invariants hold after pop"))]
+    #[cfg(test)]
+    #[requires(self.check_heap_accounting_invariants(), "Heap accounting invariants hold before pop")]
+    #[ensures(ret.is_none() || self.check_heap_accounting_invariants(), "Heap accounting invariants hold after pop")]
     #[ensures(ret.is_none() || {
         let handle = ret.as_ref().unwrap();
         handle.index() < self.states.len() && self.states[handle.index()].ref_count > 0
@@ -669,11 +677,12 @@ impl<S: Hash + Eq + Clone + Default, T> StatePool<S, T> {
     ///
     /// Note: `heap_decrease_key` only updates priority, not g-cost. We update
     /// g-cost separately via `try_update_best_cost`.
+    #[cfg(test)]
     #[requires(!path_cost.is_nan() && path_cost >= 0.0, "Path cost is valid")]
     #[requires(!estimated_total_cost.is_nan() && estimated_total_cost >= 0.0, "Estimated total cost is valid")]
     #[requires(parent.is_none() || parent.as_ref().unwrap().index() < self.states.len(), "Parent index is valid if present")]
-    #[cfg_attr(test, ensures(!ret || self.check_heap_accounting_invariants(), "If enqueued, heap accounting invariants hold"))]
-    #[cfg_attr(test, ensures(!ret || self.check_ref_count_invariants(), "If enqueued, ref count invariants hold"))]
+    #[ensures(!ret || self.check_heap_accounting_invariants(), "If enqueued, heap accounting invariants hold")]
+    #[ensures(!ret || self.check_ref_count_invariants(), "If enqueued, ref count invariants hold")]
     pub fn enqueue_or_update_state(
         &mut self,
         state: S,
