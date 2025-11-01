@@ -189,9 +189,9 @@ def load_nodes_from_csv(path: str) -> List["Node"]:
     default="best_infra_upper_bound",
     show_default=True,
     type=click.Choice(
-        ["best_infra_upper_bound", "standard", "djikstra", "dijkstra", "zero"], case_sensitive=False
+        ["best_infra_upper_bound", "standard", "dijkstra", "zero"], case_sensitive=False
     ),
-    help="Heuristic to use: best_infra_upper_bound (alias: standard) or djikstra (aliases: dijkstra, zero)",
+    help="Heuristic to use: best_infra_upper_bound (alias: standard) or dijkstra (aliases: zero)",
 )
 def main(
     input_path: str | None,

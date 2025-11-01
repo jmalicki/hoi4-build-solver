@@ -123,7 +123,7 @@ The upper bound uses a greedy "convert then build" strategy:
 
 ### `ZeroHeuristic`
 
-String name for Python CLI: `--heuristic=djikstra` (aliases: `dijkstra`, `zero`)
+String name for Python CLI: `--heuristic=dijkstra` (alias: `zero`)
 
 - `lower_bound(s) = 0` for all states `s` (admissible but weakest possible)
 - `upper_bound(s) = +∞` (disables pruning)
