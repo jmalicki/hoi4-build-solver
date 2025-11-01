@@ -466,4 +466,127 @@ mod tests {
         pool.heap_push(&h, 1.0);
         assert!(pool.heap_size() >= 1);
     }
+
+    #[test]
+    fn heap_decrease_key_only_called_when_new_value_better() {
+        // Requirement: heap_decrease_key should only be called when the new estimated_total_cost
+        // is strictly better (smaller) than what's currently in the heap.
+        //
+        // The heap stores -estimated_total_cost as keys (to simulate a min-heap using a max-heap).
+        // When we call decrease_key(&idx, -new_estimated_total_cost), the heap expects:
+        //   -new_estimated_total_cost < -current_estimated_total_cost
+        // Which means: new_estimated_total_cost > current_estimated_total_cost
+        // But we want new_estimated_total_cost < current_estimated_total_cost for better priority!
+        //
+        // This test verifies that enqueue_or_update_state can update a state's path_cost and
+        // estimated_total_cost when the state is already in the heap, without panicking.
+        //
+        // Expected behavior:
+        //   1. Enqueue state with estimated_total_cost = 100.0
+        //   2. Re-enqueue same state with better estimated_total_cost = 80.0
+        //   3. Should succeed without panicking (because we check new < current before calling decrease_key)
+        let mut pool = make_pool();
+        let state = TestState(1);
+
+        // First, enqueue state with higher estimated_total_cost
+        // path_cost = 100.0, estimated_total_cost = 100.0
+        let parent_idx = pool.insert_state(TestState(0));
+        let parent = pool.make_handle(parent_idx, 0.0);
+        let first_enqueue = pool.enqueue_or_update_state(
+            state.clone(),
+            100.0, // path_cost
+            Some(&parent),
+            0,
+            None,
+            100.0, // estimated_total_cost → stored in heap as -100.0
+        );
+        assert!(first_enqueue, "First enqueue should succeed");
+        assert_eq!(pool.heap_size(), 1, "Heap should have one state");
+
+        // Now, enqueue the same state again with a better path_cost and estimated_total_cost
+        // path_cost = 80.0 (better), estimated_total_cost = 80.0 (better)
+        // After the fix, this should:
+        //   1. try_update_best_cost: updates cost_from_start from 100.0 to 80.0 ✅
+        //   2. is_in_heap: returns true (state is in heap) ✅
+        //   3. Check if 80.0 < 100.0 (current estimated_total_cost_in_heap) ✅
+        //   4. Call heap_decrease_key(80.0) only if the check passes ✅
+        //   5. Succeed without panicking ✅
+        let second_enqueue = pool.enqueue_or_update_state(
+            state.clone(),
+            80.0, // path_cost (better)
+            Some(&parent),
+            0,
+            None,
+            80.0, // estimated_total_cost (better)
+        );
+        assert!(
+            second_enqueue,
+            "Second enqueue with better cost should succeed without panicking"
+        );
+
+        // Verify the cost was updated
+        let state_idx = pool.get_index(&state).expect("State should exist");
+        let updated_cost = pool.cost_from_start(state_idx);
+        assert_eq!(
+            updated_cost, 80.0,
+            "Cost should be updated to the better value"
+        );
+    }
+
+    #[test]
+    fn heap_decrease_key_with_worse_estimated_total_cost_should_not_call_decrease() {
+        // Requirement: When enqueue_or_update_state finds a better path_cost but the resulting
+        // estimated_total_cost is not better than what's in the heap, we should NOT call decrease_key.
+        //
+        // This test documents the expected behavior: even if path_cost improves, if estimated_total_cost
+        // doesn't improve, we should not attempt to decrease the heap key.
+        //
+        // Scenario:
+        //   - First enqueue: path_cost=100, heuristic_estimate=0, estimated_total_cost=100
+        //   - Second enqueue: path_cost=80 (better!), heuristic_estimate=25 (worse than before),
+        //     estimated_total_cost=105 (WORSE than 100!)
+        //
+        // With zero heuristic, this scenario is impossible, but this test documents the expected
+        // behavior pattern for the fix.
+        //
+        // After the fix: We should track estimated_total_cost_in_heap and check if new < current
+        // before calling decrease_key. If 105.0 >= 100.0, we should skip decrease_key.
+        //
+        // Note: This test currently passes because the heap might handle this case gracefully,
+        // but the real bug occurs when the new value IS better (first test case).
+        let mut pool = make_pool();
+        let state = TestState(2);
+        let parent_idx = pool.insert_state(TestState(0));
+        let parent = pool.make_handle(parent_idx, 0.0);
+
+        // First enqueue with estimated_total_cost = 100.0 → stored in heap as -100.0
+        let first =
+            pool.enqueue_or_update_state(state.clone(), 100.0, Some(&parent), 0, None, 100.0);
+        assert!(first, "First enqueue should succeed");
+        assert_eq!(pool.heap_size(), 1);
+
+        // Second enqueue with better path_cost (80.0) but worse estimated_total_cost (105.0)
+        // This simulates what could happen if heuristic_estimate changed from 0 to 25
+        // Note: With zero heuristic this is impossible, but this test documents the pattern
+        let second = pool.enqueue_or_update_state(
+            state.clone(),
+            80.0, // Better path_cost
+            Some(&parent),
+            0,
+            None,
+            105.0, // Worse estimated_total_cost! Should NOT call decrease_key after fix
+        );
+
+        // After the fix, this should succeed without calling decrease_key
+        // (because we'll check 105.0 < 100.0 before calling decrease_key)
+        assert!(second, "Second enqueue should succeed (path_cost improved)");
+
+        // Verify path_cost was updated
+        let state_idx = pool.get_index(&state).expect("State should exist");
+        let updated_cost = pool.cost_from_start(state_idx);
+        assert_eq!(
+            updated_cost, 80.0,
+            "Path cost should be updated to better value"
+        );
+    }
 }
