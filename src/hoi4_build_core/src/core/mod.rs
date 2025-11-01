@@ -407,9 +407,9 @@ mod tests {
 
         proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
             // Generate valid start state (small slots, low values)
-            let start = State(desc.iter().map(|d| crate::NodeState {
+            let start = State(desc.iter().map(|_d| crate::NodeState {
                 infra: 0u8,
-                civ: 0u8.min(d.slots),
+                civ: 0u8,
                 mil: 0u8,
             }).collect());
 
@@ -455,9 +455,9 @@ mod tests {
 
         proptest!(ProptestConfig::with_cases(50), |(desc in desc_strategy, target in target_strategy, target_type in target_type_strategy)| {
             // Generate valid start state (small slots, low values)
-            let start = State(desc.iter().map(|d| crate::NodeState {
+            let start = State(desc.iter().map(|_d| crate::NodeState {
                 infra: 0u8,
-                civ: 0u8.min(d.slots),
+                civ: 0u8,
                 mil: 0u8,
             }).collect());
 

@@ -24,9 +24,13 @@ impl PartialEq for StateCost {
     }
 }
 
+#[allow(clippy::non_canonical_partial_ord_impl)]
 impl PartialOrd for StateCost {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Reverse order for min-heap (lowest cost first)
+        // We reverse the comparison here because Ord::cmp will use this
+        // Note: Using non-canonical pattern is intentional here because we need
+        // to reverse the order for the min-heap, and f64 doesn't implement Ord
         other.cost.partial_cmp(&self.cost)
     }
 }
@@ -34,10 +38,8 @@ impl PartialOrd for StateCost {
 impl Ord for StateCost {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse order for min-heap (lowest cost first)
-        match self.partial_cmp(other) {
-            Some(ordering) => ordering,
-            None => Ordering::Equal,
-        }
+        // Use partial_cmp which handles f64 comparison
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
     }
 }
 
@@ -54,6 +56,7 @@ const MAX_STATES: usize = 10_000;
 ///
 /// This solver is only intended for very small instances (≤2 nodes, ≤3 slots, ≤2 target)
 /// to validate heuristic admissibility. For larger instances, it will return `None`.
+#[allow(private_interfaces)]
 pub fn exact_optimal_cost(
     desc: &[NodeDesc],
     start: &State,

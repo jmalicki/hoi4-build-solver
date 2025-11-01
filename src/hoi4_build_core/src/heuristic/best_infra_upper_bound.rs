@@ -52,8 +52,6 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         };
 
         if remaining == 0 {
-            #[cfg(debug_assertions)]
-            debug_assert!(0.0 >= 0.0, "lower_bound must be non-negative");
             return 0.0;
         }
 
@@ -141,8 +139,6 @@ impl Heuristic for BestInfraUpperBoundHeuristic {
         };
 
         if need == 0 {
-            #[cfg(debug_assertions)]
-            debug_assert!(0.0 >= 0.0, "upper_bound must be non-negative");
             return 0.0;
         }
 
