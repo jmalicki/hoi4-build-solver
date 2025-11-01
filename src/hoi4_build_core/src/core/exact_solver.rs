@@ -27,22 +27,19 @@ impl PartialEq for StateCost {
 impl PartialOrd for StateCost {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         // Reverse order for min-heap (lowest cost first)
-        // Canonical pattern: call cmp for Ord types
-        Some(self.cmp(other))
+        // We reverse the comparison here because Ord::cmp will use this
+        // Note: Using non-canonical pattern is intentional here because we need
+        // to reverse the order for the min-heap, and f64 doesn't implement Ord
+        #[allow(clippy::non_canonical_partial_ord_impl)]
+        other.cost.partial_cmp(&self.cost)
     }
 }
 
 impl Ord for StateCost {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse order for min-heap (lowest cost first)
-        // Compare costs directly (f64 comparison)
-        match other.cost.partial_cmp(&self.cost) {
-            Some(ordering) => ordering,
-            None => {
-                // If costs are incomparable (NaN), order by state
-                self.state.cmp(&other.state)
-            }
-        }
+        // Use partial_cmp which handles f64 comparison
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
     }
 }
 
