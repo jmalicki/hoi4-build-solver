@@ -76,7 +76,15 @@ Optional columns (if present, they are subtracted from numSlots before modeling)
 
 Constraint per node: `numMilitary + numCivilian ≤ numSlots`.
 
-Column name aliases are supported (e.g., `slots`, `infra`, `civ`, `mil`, `dockyards`).
+Column name aliases are supported. The following mappings are recognized (case-insensitive):
+
+- `nodeName` → `name`, `state`, `node`, `province`
+- `numSlots` → `slots`, `buildingslots`
+- `numInfra` → `infra`, `infrastructure`
+- `numCivilian` → `civilian`, `civ`, `civilianfactories`
+- `numMilitary` → `military`, `mil`, `militaryfactories`
+- `Docks` → `docks`, `dockyards`, `navaldockyards`
+- `Refineries` → `refineries`, `syntheticrefineries`, `refinery`
 
 ## Usage
 
@@ -101,8 +109,8 @@ hoi4-build-solve \
 - `--target`: Target value for the selected target type
 - `--moves-out`: Output CSV path for the action sequence
 - `--final-out`: Output CSV path for the final node states
-- `--heuristic`: Heuristic to use - accepts four case-insensitive choices: `best_infra_upper_bound` (default),
-  `standard` (alias for `best_infra_upper_bound`), or `zero`, `dijkstra` (interchangeable options for zero heuristic)
+- `--heuristic`: Heuristic to use - accepts four case-insensitive choices: `best_infra_upper_bound` (default, alias:
+  `standard`), or `dijkstra` (alias: `zero`)
 - `--no-prune`: Disable upper-bound pruning (pruning enabled by default)
 - `--verbose`/`--quiet`: Control progress output (default: verbose)
 - `--print-every`: Print progress every N iterations (default: 10000, set to 0 to disable)
