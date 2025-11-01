@@ -528,7 +528,7 @@ mod tests {
             // When popping state S with f(S), all remaining states have f >= f(S)
             let desc = make_desc();
             let start = make_start();
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
 
             let h0 = heuristic_impl.lower_bound(&start, &desc, crate::TargetType::Military, 2);
@@ -595,7 +595,7 @@ mod tests {
             // This test verifies that enqueue_or_update_state updates states with better costs
             let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
             let state1 = make_start();
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let desc = make_desc();
             let target_type = crate::TargetType::Military;
             let target = 2;
@@ -663,7 +663,7 @@ mod tests {
             // This test verifies that the same state doesn't appear multiple times in the heap
             let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
             let state1 = make_start();
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let desc = make_desc();
             let target_type = crate::TargetType::Military;
             let target = 2;
@@ -704,7 +704,7 @@ mod tests {
             // we correctly handle it (either re-expand or update correctly)
             let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
             let state1 = make_start();
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let desc = make_desc();
             let target_type = crate::TargetType::Military;
             let target = 2;
@@ -752,7 +752,7 @@ mod tests {
             // i.e., g(goal) <= f(any_unexpanded_state)
             let desc = make_desc();
             let start = make_start();
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let mut pool = crate::state_pool::StatePool::<State, TransitionInfo>::new(1000);
 
             let target_type = crate::TargetType::Military;
@@ -851,7 +851,7 @@ mod tests {
                     mil: 0,
                 },
             ]);
-            let heuristic_impl = create_by_name("djikstra").expect("heuristic must be valid");
+            let heuristic_impl = create_by_name("dijkstra").expect("heuristic must be valid");
             let desc = make_desc();
             let target_type = crate::TargetType::Military;
             let target = 2;
@@ -914,7 +914,7 @@ mod tests {
             let opts_noprune: SolveOptions<'_, fn(&ProgressSnapshot) -> bool> = SolveOptions {
                 prune: false,
                 print_every: usize::MAX,
-                heuristic_name: "djikstra",
+                heuristic_name: "dijkstra",
                 progress_cb: None,
             };
 
