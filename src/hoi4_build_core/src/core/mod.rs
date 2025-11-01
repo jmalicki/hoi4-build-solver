@@ -72,7 +72,7 @@ where
                 cost_from_start: cur_cost,
                 heap_size: pool.heap_size(),
                 total_states: pool.total_states(),
-                avg_estimated_total_cost: pool.heap_avg_estimated_total_cost(),
+                avg_estimated_total_cost: pool.heap_avg_f(),
                 pruned,
                 best_upper_bound: best_ub,
             };
